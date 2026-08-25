@@ -204,6 +204,9 @@ export class WaveBrowserWindow extends BaseWindow {
             }
         } else if (opts.unamePlatform === "win32") {
             winOpts.titleBarStyle = "hidden";
+            // Packaged builds get their icon from electron-builder (build/icon.ico), but a dev
+            // run has none and falls back to the default Electron icon, so set it explicitly.
+            winOpts.icon = path.join(getElectronAppBasePath(), "public/logos/wave-logo-dark.png");
             winOpts.titleBarOverlay = {
                 color: "#222222",
                 symbolColor: "#c3c8c2",

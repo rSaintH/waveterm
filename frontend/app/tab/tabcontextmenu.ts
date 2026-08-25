@@ -17,6 +17,29 @@ const FlagColors: { label: string; value: string }[] = [
     { label: "Yellow", value: "#FFE900" },
 ];
 
+export function buildNewTabProjectsMenu(
+    fullConfig: FullConfigType,
+    createTab: (opts?: { tabName?: string; cwd?: string }) => void
+): ContextMenuItem[] {
+    const projects = fullConfig?.projects ?? {};
+    const menu: ContextMenuItem[] = Object.entries(projects)
+        .filter(([, proj]) => !proj["display:hidden"] && proj.path)
+        .sort(
+            (a, b) =>
+                (a[1]["display:order"] ?? 0) - (b[1]["display:order"] ?? 0) ||
+                (a[1].label ?? a[0]).localeCompare(b[1].label ?? b[0])
+        )
+        .map(([key, proj]) => ({
+            label: proj.label || key,
+            click: () => createTab({ tabName: proj.label || key, cwd: proj.path }),
+        }));
+    if (menu.length == 0) {
+        menu.push({ label: "No projects configured (projects.json)", enabled: false, click: () => {} });
+    }
+    menu.push({ type: "separator" }, { label: "New Default Tab", click: () => createTab() });
+    return menu;
+}
+
 export function buildTabBarContextMenu(env: TabEnv): ContextMenuItem[] {
     const currentTabBar = globalStore.get(env.getSettingsKeyAtom("app:tabbar")) ?? "top";
     const tabBarSubmenu: ContextMenuItem[] = [

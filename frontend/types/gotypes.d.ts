@@ -1013,6 +1013,7 @@ declare global {
         mimetypes: {[key: string]: MimeTypeConfigType};
         defaultwidgets: {[key: string]: WidgetConfigType};
         widgets: {[key: string]: WidgetConfigType};
+        projects: {[key: string]: ProjectConfigType};
         presets: {[key: string]: MetaType};
         backgrounds: {[key: string]: BackgroundConfigType};
         termthemes: {[key: string]: TermThemeType};
@@ -1303,6 +1304,19 @@ declare global {
         cpusum?: number;
     };
 
+    // wconfig.ProjectConfigType
+    type ProjectConfigType = {
+        "display:order"?: number;
+        "display:hidden"?: boolean;
+        icon?: string;
+        color?: string;
+        label?: string;
+        path: string;
+        repourl?: string;
+        produrl?: string;
+        description?: string;
+    };
+
     // uctypes.RateLimitInfo
     type RateLimitInfo = {
         req: number;
@@ -1589,6 +1603,7 @@ declare global {
         "debug:panictype"?: string;
         "block:view"?: string;
         "block:controller"?: string;
+        "block:subblock"?: boolean;
         "ai:backendtype"?: string;
         "ai:local"?: boolean;
         "wsh:cmd"?: string;

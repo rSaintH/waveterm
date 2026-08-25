@@ -60,13 +60,17 @@ func GetStarterLayout() PortableLayout {
 	}
 }
 
-func GetNewTabLayout() PortableLayout {
+func GetNewTabLayout(cwd string) PortableLayout {
+	blockMeta := waveobj.MetaMapType{
+		waveobj.MetaKey_View:       "term",
+		waveobj.MetaKey_Controller: "shell",
+	}
+	if cwd != "" {
+		blockMeta[waveobj.MetaKey_CmdCwd] = cwd
+	}
 	return PortableLayout{
 		{IndexArr: []int{0}, BlockDef: &waveobj.BlockDef{
-			Meta: waveobj.MetaMapType{
-				waveobj.MetaKey_View:       "term",
-				waveobj.MetaKey_Controller: "shell",
-			},
+			Meta: blockMeta,
 		}, Focused: true},
 	}
 }

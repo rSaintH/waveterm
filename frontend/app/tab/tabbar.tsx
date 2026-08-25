@@ -13,6 +13,7 @@ import { OverlayScrollbars } from "overlayscrollbars";
 import { createRef, memo, useCallback, useEffect, useRef, useState } from "react";
 import { debounce } from "throttle-debounce";
 import { Tab } from "./tab";
+import { buildNewTabProjectsMenu } from "./tabcontextmenu";
 import "./tabbar.scss";
 import { TabBarEnv } from "./tabbarenv";
 import { UpdateStatusBanner } from "./updatebanner";
@@ -530,13 +531,20 @@ const TabBar = memo(({ workspace, noTabs }: TabBarProps) => {
         []
     );
 
-    const handleAddTab = () => {
-        env.electron.createTab();
+    const fullConfig = useAtomValue(env.atoms.fullConfigAtom);
+
+    const handleAddTab = (opts?: { tabName?: string; cwd?: string }) => {
+        env.electron.createTab(opts);
         tabsWrapperRef.current.style.setProperty("--tabs-wrapper-transition", "width 0.1s ease");
 
         updateScrollDebounced();
 
         setNewTabIdDebounced(null);
+    };
+
+    const handleAddTabContextMenu = (e: React.MouseEvent) => {
+        e.preventDefault();
+        env.showContextMenu(buildNewTabProjectsMenu(fullConfig, handleAddTab), e);
     };
 
     const handleCloseTab = (event: React.MouseEvent<HTMLButtonElement, MouseEvent> | null, tabId: string) => {
@@ -660,7 +668,8 @@ const TabBar = memo(({ workspace, noTabs }: TabBarProps) => {
                 title="Add Tab"
                 className={`flex h-[22px] px-2 mb-1 mx-1 items-center rounded-md box-border cursor-pointer hover:bg-hoverbg transition-colors text-[12px] text-secondary hover:text-primary${noTabs ? " invisible" : ""}`}
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-                onClick={handleAddTab}
+                onClick={() => handleAddTab()}
+                onContextMenu={handleAddTabContextMenu}
             >
                 <i className="fa fa-solid fa-plus" />
             </button>

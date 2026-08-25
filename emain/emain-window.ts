@@ -130,6 +130,8 @@ type WindowActionQueueEntry =
       }
     | {
           op: "createtab";
+          tabName?: string;
+          cwd?: string;
       }
     | {
           op: "closetab";
@@ -525,8 +527,8 @@ export class WaveBrowserWindow extends BaseWindow {
         }
     }
 
-    async queueCreateTab() {
-        await this._queueActionInternal({ op: "createtab" });
+    async queueCreateTab(opts?: { tabName?: string; cwd?: string }) {
+        await this._queueActionInternal({ op: "createtab", tabName: opts?.tabName, cwd: opts?.cwd });
     }
 
     async queueCloseTab(tabId: string) {
@@ -566,7 +568,7 @@ export class WaveBrowserWindow extends BaseWindow {
                 // have to use "===" here to get the typechecker to work :/
                 switch (entry.op) {
                     case "createtab":
-                        tabId = await WorkspaceService.CreateTab(this.workspaceId, null, true);
+                        tabId = await WorkspaceService.CreateTab(this.workspaceId, entry.tabName ?? null, true, entry.cwd ?? "");
                         break;
                     case "switchtab":
                         tabId = entry.tabId;
@@ -747,11 +749,13 @@ ipcMain.on("set-active-tab", async (event, tabId) => {
     await ww?.setActiveTab(tabId, true);
 });
 
-ipcMain.on("create-tab", async (event, _opts) => {
+ipcMain.on("create-tab", async (event, opts) => {
     const senderWc = event.sender;
     const ww = getWaveWindowByWebContentsId(senderWc.id);
     if (ww != null) {
-        await ww.queueCreateTab();
+        const tabName = typeof opts?.tabName === "string" ? opts.tabName : undefined;
+        const cwd = typeof opts?.cwd === "string" ? opts.cwd : undefined;
+        await ww.queueCreateTab({ tabName, cwd });
     }
     event.returnValue = true;
     return null;

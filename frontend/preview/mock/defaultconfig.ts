@@ -14,6 +14,7 @@ export const DefaultFullConfig: FullConfigType = {
     mimetypes: mimetypesJson as unknown as { [key: string]: MimeTypeConfigType },
     defaultwidgets: widgetsJson as unknown as { [key: string]: WidgetConfigType },
     widgets: {},
+    projects: {},
     presets: presetsJson as unknown as { [key: string]: MetaType },
     termthemes: termthemesJson as unknown as { [key: string]: TermThemeType },
     connections: {},

@@ -12,7 +12,7 @@ import { validateCssColor } from "@/util/color-validator";
 import { cn, fireAndForget } from "@/util/util";
 import { useAtomValue } from "jotai";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { buildTabBarContextMenu, buildTabContextMenu } from "./tabcontextmenu";
+import { buildNewTabProjectsMenu, buildTabBarContextMenu, buildTabContextMenu } from "./tabcontextmenu";
 import { UpdateStatusBanner } from "./updatebanner";
 import { VTab, VTabItem } from "./vtab";
 import { VTabBarEnv } from "./vtabbarenv";
@@ -189,6 +189,7 @@ export function VTabBar({ workspace, className }: VTabBarProps) {
     const activeTabId = useAtomValue(env.atoms.staticTabId);
     const reinitVersion = useAtomValue(env.atoms.reinitVersion);
     const documentHasFocus = useAtomValue(env.atoms.documentHasFocus);
+    const fullConfig = useAtomValue(env.atoms.fullConfigAtom);
     const tabIds = workspace?.tabids ?? [];
 
     const [orderedTabIds, setOrderedTabIds] = useState<string[]>(tabIds);
@@ -423,6 +424,13 @@ export function VTabBar({ workspace, className }: VTabBarProps) {
                 type="button"
                 className="group relative flex h-9 w-full shrink-0 cursor-pointer items-center gap-1.5 pl-3 pr-3 text-xs text-secondary/60 transition-colors hover:text-primary select-none whitespace-nowrap"
                 onClick={() => env.electron.createTab()}
+                onContextMenu={(e) => {
+                    e.preventDefault();
+                    env.showContextMenu(
+                        buildNewTabProjectsMenu(fullConfig, (opts) => env.electron.createTab(opts)),
+                        e
+                    );
+                }}
                 onMouseEnter={() => setIsNewTabHovered(true)}
                 onMouseLeave={() => setIsNewTabHovered(false)}
                 aria-label="New Tab"

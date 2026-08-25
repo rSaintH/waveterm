@@ -323,6 +323,18 @@ type WidgetConfigType struct {
 	BlockDef      waveobj.BlockDef `json:"blockdef"`
 }
 
+type ProjectConfigType struct {
+	DisplayOrder  float64 `json:"display:order,omitempty"`
+	DisplayHidden bool    `json:"display:hidden,omitempty"`
+	Icon          string  `json:"icon,omitempty"`
+	Color         string  `json:"color,omitempty"`
+	Label         string  `json:"label,omitempty"`
+	Path          string  `json:"path" jsonschema_description:"Fixed working directory for the project; new tabs for this project open their terminal here"`
+	RepoUrl       string  `json:"repourl,omitempty" jsonschema_description:"Repository URL for the project"`
+	ProdUrl       string  `json:"produrl,omitempty" jsonschema_description:"Production URL for the project"`
+	Description   string  `json:"description,omitempty"`
+}
+
 type BackgroundConfigType struct {
 	Bg                  string  `json:"bg,omitempty" jsonschema_description:"CSS background property value"`
 	BgOpacity           float64 `json:"bg:opacity,omitempty" jsonschema_description:"Background opacity (0.0-1.0)"`
@@ -370,6 +382,7 @@ type FullConfigType struct {
 	MimeTypes      map[string]MimeTypeConfigType   `json:"mimetypes"`
 	DefaultWidgets map[string]WidgetConfigType     `json:"defaultwidgets"`
 	Widgets        map[string]WidgetConfigType     `json:"widgets"`
+	Projects       map[string]ProjectConfigType    `json:"projects"`
 	Presets        map[string]waveobj.MetaMapType  `json:"presets"`
 	Backgrounds    map[string]BackgroundConfigType `json:"backgrounds"`
 	TermThemes     map[string]TermThemeType        `json:"termthemes"`

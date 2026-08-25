@@ -215,6 +215,12 @@ func DeleteBuilderCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpts) 
 	return err
 }
 
+// command "deleteprojectconfig", wshserver.DeleteProjectConfigCommand
+func DeleteProjectConfigCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpts) error {
+	_, err := sendRpcRequestCallHelper[any](w, "deleteprojectconfig", data, opts)
+	return err
+}
+
 // command "deletesubblock", wshserver.DeleteSubBlockCommand
 func DeleteSubBlockCommand(w *wshutil.WshRpc, data wshrpc.CommandDeleteBlockData, opts *wshrpc.RpcOpts) error {
 	_, err := sendRpcRequestCallHelper[any](w, "deletesubblock", data, opts)
@@ -857,6 +863,12 @@ func SetMetaCommand(w *wshutil.WshRpc, data wshrpc.CommandSetMetaData, opts *wsh
 // command "setpeerinfo", wshserver.SetPeerInfoCommand
 func SetPeerInfoCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpts) error {
 	_, err := sendRpcRequestCallHelper[any](w, "setpeerinfo", data, opts)
+	return err
+}
+
+// command "setprojectconfig", wshserver.SetProjectConfigCommand
+func SetProjectConfigCommand(w *wshutil.WshRpc, data wshrpc.ProjectConfigRequest, opts *wshrpc.RpcOpts) error {
+	_, err := sendRpcRequestCallHelper[any](w, "setprojectconfig", data, opts)
 	return err
 }
 

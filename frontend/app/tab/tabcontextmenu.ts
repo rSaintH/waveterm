@@ -19,7 +19,7 @@ const FlagColors: { label: string; value: string }[] = [
 
 export function buildNewTabProjectsMenu(
     fullConfig: FullConfigType,
-    createTab: (opts?: { tabName?: string; cwd?: string }) => void
+    createTab: (opts?: { tabName?: string; cwd?: string; connection?: string; projectKey?: string }) => void
 ): ContextMenuItem[] {
     const projects = fullConfig?.projects ?? {};
     const menu: ContextMenuItem[] = Object.entries(projects)
@@ -31,7 +31,13 @@ export function buildNewTabProjectsMenu(
         )
         .map(([key, proj]) => ({
             label: proj.label || key,
-            click: () => createTab({ tabName: proj.label || key, cwd: proj.path }),
+            click: () =>
+                createTab({
+                    tabName: proj.label || key,
+                    cwd: proj.path,
+                    connection: proj.connection,
+                    projectKey: key,
+                }),
         }));
     if (menu.length == 0) {
         menu.push({ label: "No projects configured (projects.json)", enabled: false, click: () => {} });

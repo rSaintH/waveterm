@@ -533,7 +533,7 @@ const TabBar = memo(({ workspace, noTabs }: TabBarProps) => {
 
     const fullConfig = useAtomValue(env.atoms.fullConfigAtom);
 
-    const handleAddTab = (opts?: { tabName?: string; cwd?: string }) => {
+    const handleAddTab = (opts?: { tabName?: string; cwd?: string; connection?: string; projectKey?: string }) => {
         env.electron.createTab(opts);
         tabsWrapperRef.current.style.setProperty("--tabs-wrapper-transition", "width 0.1s ease");
 

@@ -1096,6 +1096,10 @@ declare global {
         pinnedurl?: string;
         connection?: string;
         edit?: boolean;
+        "project:key"?: string;
+        "project:path"?: string;
+        "project:connection"?: string;
+        "project:url"?: string;
         history?: string[];
         "history:forward"?: string[];
         "display:name"?: string;
@@ -1304,6 +1308,12 @@ declare global {
         cpusum?: number;
     };
 
+    // wshrpc.ProjectConfigRequest
+    type ProjectConfigRequest = {
+        projectkey: string;
+        metamaptype: MetaType;
+    };
+
     // wconfig.ProjectConfigType
     type ProjectConfigType = {
         "display:order"?: number;
@@ -1312,6 +1322,7 @@ declare global {
         color?: string;
         label?: string;
         path: string;
+        connection?: string;
         repourl?: string;
         produrl?: string;
         description?: string;

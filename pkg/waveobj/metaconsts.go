@@ -20,6 +20,11 @@ const (
 
 	MetaKey_Edit                             = "edit"
 
+	MetaKey_ProjectKey                       = "project:key"
+	MetaKey_ProjectPath                      = "project:path"
+	MetaKey_ProjectConnection                = "project:connection"
+	MetaKey_ProjectUrl                       = "project:url"
+
 	MetaKey_History                          = "history"
 	MetaKey_HistoryForward                   = "history:forward"
 

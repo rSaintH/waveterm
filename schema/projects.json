@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ProjectConfigType": {
+      "properties": {
+        "display:order": {
+          "type": "number"
+        },
+        "display:hidden": {
+          "type": "boolean"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "description": "Fixed working directory for the project; new tabs for this project open their terminal here"
+        },
+        "connection": {
+          "type": "string",
+          "description": "Connection the project lives on, e.g. \"wsl://Ubuntu\" or \"user@host\"; empty means the local machine"
+        },
+        "repourl": {
+          "type": "string",
+          "description": "Repository URL for the project"
+        },
+        "produrl": {
+          "type": "string",
+          "description": "Production URL for the project"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "path"
+      ]
+    }
+  },
+  "additionalProperties": {
+    "anyOf": [
+      {
+        "$ref": "#/$defs/ProjectConfigType"
+      },
+      {
+        "type": "null"
+      }
+    ]
+  },
+  "type": "object"
+}

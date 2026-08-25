@@ -76,6 +76,8 @@ type WshRpcInterface interface {
 	TestMultiArgCommand(ctx context.Context, arg1 string, arg2 int, arg3 bool) (string, error)
 	SetConfigCommand(ctx context.Context, data MetaSettingsType) error
 	SetConnectionsConfigCommand(ctx context.Context, data ConnConfigRequest) error
+	SetProjectConfigCommand(ctx context.Context, data ProjectConfigRequest) error
+	DeleteProjectConfigCommand(ctx context.Context, projectKey string) error
 	GetFullConfigCommand(ctx context.Context) (wconfig.FullConfigType, error)
 	GetWaveAIModeConfigCommand(ctx context.Context) (wconfig.AIModeConfigUpdate, error)
 	BlockInfoCommand(ctx context.Context, blockId string) (*BlockInfoData, error)
@@ -410,6 +412,11 @@ func (m MetaSettingsType) MarshalJSON() ([]byte, error) {
 
 type ConnConfigRequest struct {
 	Host        string              `json:"host"`
+	MetaMapType waveobj.MetaMapType `json:"metamaptype"`
+}
+
+type ProjectConfigRequest struct {
+	ProjectKey  string              `json:"projectkey"`
 	MetaMapType waveobj.MetaMapType `json:"metamaptype"`
 }
 

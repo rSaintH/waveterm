@@ -26,6 +26,7 @@ import (
 const SettingsFile = "settings.json"
 const ConnectionsFile = "connections.json"
 const ProfilesFile = "profiles.json"
+const ProjectsFile = "projects.json"
 
 var configWriteLock sync.Mutex
 
@@ -330,6 +331,7 @@ type ProjectConfigType struct {
 	Color         string  `json:"color,omitempty"`
 	Label         string  `json:"label,omitempty"`
 	Path          string  `json:"path" jsonschema_description:"Fixed working directory for the project; new tabs for this project open their terminal here"`
+	Connection    string  `json:"connection,omitempty" jsonschema_description:"Connection the project lives on, e.g. \"wsl://Ubuntu\" or \"user@host\"; empty means the local machine"`
 	RepoUrl       string  `json:"repourl,omitempty" jsonschema_description:"Repository URL for the project"`
 	ProdUrl       string  `json:"produrl,omitempty" jsonschema_description:"Production URL for the project"`
 	Description   string  `json:"description,omitempty"`
@@ -910,6 +912,44 @@ func SetConnectionsConfigValue(connName string, toMerge waveobj.MetaMapType) err
 	}
 	m[connName] = connData
 	return WriteWaveHomeConfigFile(ConnectionsFile, m)
+}
+
+// SetProjectConfigValue writes a single project entry into projects.json. The entry is
+// replaced wholesale rather than merged, so a field cleared in the project panel is
+// actually removed from the file.
+func SetProjectConfigValue(projectKey string, projectData waveobj.MetaMapType) error {
+	if projectKey == "" {
+		return fmt.Errorf("project key cannot be empty")
+	}
+	m, cerrs := ReadWaveHomeConfigFile(ProjectsFile)
+	if len(cerrs) > 0 {
+		return fmt.Errorf("error reading config file: %v", cerrs[0])
+	}
+	if m == nil {
+		m = make(waveobj.MetaMapType)
+	}
+	if projectData == nil {
+		projectData = make(waveobj.MetaMapType)
+	}
+	m[projectKey] = projectData
+	return WriteWaveHomeConfigFile(ProjectsFile, m)
+}
+
+// DeleteProjectConfigValue removes a project entry from projects.json. Deleting a key that
+// is not present is not an error, so the panel can retry a failed delete safely.
+func DeleteProjectConfigValue(projectKey string) error {
+	if projectKey == "" {
+		return fmt.Errorf("project key cannot be empty")
+	}
+	m, cerrs := ReadWaveHomeConfigFile(ProjectsFile)
+	if len(cerrs) > 0 {
+		return fmt.Errorf("error reading config file: %v", cerrs[0])
+	}
+	if m == nil {
+		return nil
+	}
+	delete(m, projectKey)
+	return WriteWaveHomeConfigFile(ProjectsFile, m)
 }
 
 func MigratePresetsBackgrounds() {

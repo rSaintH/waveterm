@@ -60,13 +60,18 @@ func GetStarterLayout() PortableLayout {
 	}
 }
 
-func GetNewTabLayout(cwd string) PortableLayout {
+func GetNewTabLayout(cwd string, connection string) PortableLayout {
 	blockMeta := waveobj.MetaMapType{
 		waveobj.MetaKey_View:       "term",
 		waveobj.MetaKey_Controller: "shell",
 	}
 	if cwd != "" {
 		blockMeta[waveobj.MetaKey_CmdCwd] = cwd
+	}
+	// A project on a connection (wsl://distro, user@host) needs both: the cwd is a path on
+	// that machine, so without the connection the shell would start locally and fail.
+	if connection != "" {
+		blockMeta[waveobj.MetaKey_Connection] = connection
 	}
 	return PortableLayout{
 		{IndexArr: []int{0}, BlockDef: &waveobj.BlockDef{

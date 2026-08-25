@@ -559,6 +559,14 @@ func (ws *WshServer) SetConnectionsConfigCommand(ctx context.Context, data wshrp
 	return wconfig.SetConnectionsConfigValue(data.Host, data.MetaMapType)
 }
 
+func (ws *WshServer) SetProjectConfigCommand(ctx context.Context, data wshrpc.ProjectConfigRequest) error {
+	return wconfig.SetProjectConfigValue(data.ProjectKey, data.MetaMapType)
+}
+
+func (ws *WshServer) DeleteProjectConfigCommand(ctx context.Context, projectKey string) error {
+	return wconfig.DeleteProjectConfigValue(projectKey)
+}
+
 func (ws *WshServer) GetFullConfigCommand(ctx context.Context) (wconfig.FullConfigType, error) {
 	watcher := wconfig.GetWatcher()
 	return watcher.GetFullConfig(), nil

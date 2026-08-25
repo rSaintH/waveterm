@@ -216,6 +216,12 @@ export class RpcApiType {
         return client.wshRpcCall("deletebuilder", data, opts);
     }
 
+    // command "deleteprojectconfig" [call]
+    DeleteProjectConfigCommand(client: WshClient, data: string, opts?: RpcOpts): Promise<void> {
+        if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "deleteprojectconfig", data, opts);
+        return client.wshRpcCall("deleteprojectconfig", data, opts);
+    }
+
     // command "deletesubblock" [call]
     DeleteSubBlockCommand(client: WshClient, data: CommandDeleteBlockData, opts?: RpcOpts): Promise<void> {
         if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "deletesubblock", data, opts);
@@ -862,6 +868,12 @@ export class RpcApiType {
     SetPeerInfoCommand(client: WshClient, data: string, opts?: RpcOpts): Promise<void> {
         if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "setpeerinfo", data, opts);
         return client.wshRpcCall("setpeerinfo", data, opts);
+    }
+
+    // command "setprojectconfig" [call]
+    SetProjectConfigCommand(client: WshClient, data: ProjectConfigRequest, opts?: RpcOpts): Promise<void> {
+        if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "setprojectconfig", data, opts);
+        return client.wshRpcCall("setprojectconfig", data, opts);
     }
 
     // command "setrtinfo" [call]

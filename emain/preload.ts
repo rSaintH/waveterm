@@ -51,7 +51,9 @@ contextBridge.exposeInMainWorld("api", {
     switchWorkspace: (workspaceId) => ipcRenderer.send("switch-workspace", workspaceId),
     deleteWorkspace: (workspaceId) => ipcRenderer.send("delete-workspace", workspaceId),
     setActiveTab: (tabId) => ipcRenderer.send("set-active-tab", tabId),
-    createTab: (opts?: { tabName?: string; cwd?: string }) => ipcRenderer.send("create-tab", opts),
+    createTab: (opts?: { tabName?: string; cwd?: string; connection?: string; projectKey?: string }) =>
+        ipcRenderer.send("create-tab", opts),
+    selectDirectory: (defaultPath?: string) => ipcRenderer.invoke("select-directory", defaultPath),
     closeTab: (workspaceId, tabId, confirmClose) => ipcRenderer.invoke("close-tab", workspaceId, tabId, confirmClose),
     setWindowInitStatus: (status) => ipcRenderer.send("set-window-init-status", status),
     onWaveInit: (callback) => ipcRenderer.on("wave-init", (_event, initOpts) => callback(initOpts)),

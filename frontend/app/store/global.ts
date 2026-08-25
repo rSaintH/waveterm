@@ -405,9 +405,95 @@ async function createBlockSplitVertically(
     return newBlockId;
 }
 
+// Inside a project tab, blocks that open a directory should open at the project path rather
+// than the home directory, so switching tabs switches context completely. Sidebar widgets pass
+// their blockdef through verbatim, and the stock "files" widget hardcodes "~", so "~" counts as
+// unset here. A blockdef pointing at any other explicit path is always left alone.
+// Windows paths reach us with either slash style and inconsistent case, so compare them
+// normalized rather than literally.
+function normalizeProjectPath(p: string): string {
+    return p?.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase() ?? "";
+}
+
+// project:key is the real reference into projects.json. Tabs created before the key existed
+// only carry project:path, and matching on that keeps them working instead of silently
+// falling back to the global defaults.
+function resolveTabProject(projectKey: string, projectPath: string): ProjectConfigType {
+    const projects = globalStore.get(atoms.fullConfigAtom)?.projects;
+    if (projects == null) {
+        return null;
+    }
+    if (!isBlank(projectKey) && projects[projectKey] != null) {
+        return projects[projectKey];
+    }
+    if (isBlank(projectPath)) {
+        return null;
+    }
+    const wanted = normalizeProjectPath(projectPath);
+    for (const proj of Object.values(projects)) {
+        if (normalizeProjectPath(proj?.path) === wanted) {
+            return proj;
+        }
+    }
+    return null;
+}
+
+function applyProjectPathToBlockDef(blockDef: BlockDef): BlockDef {
+    const tabId = globalStore.get(atoms.staticTabId);
+    if (isBlank(tabId) || blockDef?.meta == null) {
+        return blockDef;
+    }
+    const tabAtom = WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", tabId));
+    const tabMeta = globalStore.get(tabAtom)?.meta;
+    const projectPath = tabMeta?.["project:path"];
+    const projectKey = tabMeta?.["project:key"];
+    const project = resolveTabProject(projectKey, projectPath);
+    const meta = blockDef.meta;
+
+    // A widget can ask for the project's repo or production page. This is the only case that
+    // works without a path, so it is resolved before the path check below.
+    if (meta.view == "web" && !isBlank(meta["project:url"])) {
+        const wanted = meta["project:url"] == "prod" ? project?.produrl : project?.repourl;
+        const newMeta = { ...meta };
+        delete newMeta["project:url"];
+        if (!isBlank(wanted)) {
+            newMeta.url = wanted;
+        }
+        return { ...blockDef, meta: newMeta };
+    }
+
+    if (isBlank(projectPath)) {
+        return blockDef;
+    }
+    // A project on a connection needs it carried too, otherwise the block opens locally at a
+    // path that only exists on the remote machine.
+    const projectConn = tabMeta?.["project:connection"];
+    const withConn = (extra: Record<string, any>) => {
+        const newMeta = { ...blockDef.meta, ...extra };
+        if (!isBlank(projectConn) && newMeta.connection == null) {
+            newMeta.connection = projectConn;
+        }
+        return { ...blockDef, meta: newMeta };
+    };
+    if (meta.view == "term" && meta["cmd:cwd"] == null) {
+        return withConn({ "cmd:cwd": projectPath });
+    }
+    if (meta.view == "preview" && (meta.file == null || meta.file == "~")) {
+        return withConn({ file: projectPath });
+    }
+    // The stock "web" widget carries no url and falls back to the global web:defaulturl
+    // setting, which ships pointing at Wave's own repo. In a project tab, the project's repo
+    // is the useful default.
+    if (meta.view == "web" && isBlank(meta.url) && !isBlank(project?.repourl)) {
+        return { ...blockDef, meta: { ...meta, url: project.repourl } };
+    }
+    return blockDef;
+}
+
 async function createBlock(blockDef: BlockDef, magnified = false, ephemeral = false): Promise<string> {
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
+    blockDef = applyProjectPathToBlockDef(blockDef);
     const blockId = await ObjectService.CreateBlock(blockDef, rtOpts);
     if (ephemeral) {
         layoutModel.newEphemeralNode(blockId);

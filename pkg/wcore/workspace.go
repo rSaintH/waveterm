@@ -62,7 +62,7 @@ func CreateWorkspace(ctx context.Context, name string, icon string, color string
 	if err != nil {
 		return nil, fmt.Errorf("error inserting workspace: %w", err)
 	}
-	_, err = CreateTab(ctx, ws.OID, "", true, isInitialLaunch, "")
+	_, err = CreateTab(ctx, ws.OID, "", true, isInitialLaunch, "", "", "")
 	if err != nil {
 		return nil, fmt.Errorf("error creating tab: %w", err)
 	}
@@ -220,7 +220,7 @@ func getNextTabName(tabNames []string) string {
 }
 
 // returns tabid
-func CreateTab(ctx context.Context, workspaceId string, tabName string, activateTab bool, isInitialLaunch bool, cwd string) (string, error) {
+func CreateTab(ctx context.Context, workspaceId string, tabName string, activateTab bool, isInitialLaunch bool, cwd string, connection string, projectKey string) (string, error) {
 	if tabName == "" {
 		ws, err := GetWorkspace(ctx, workspaceId)
 		if err != nil {
@@ -238,8 +238,17 @@ func CreateTab(ctx context.Context, workspaceId string, tabName string, activate
 	}
 
 	var tabMeta waveobj.MetaMapType
-	if cwd != "" {
-		tabMeta = waveobj.MetaMapType{"project:path": cwd}
+	if cwd != "" || projectKey != "" {
+		tabMeta = waveobj.MetaMapType{}
+		if cwd != "" {
+			tabMeta[waveobj.MetaKey_ProjectPath] = cwd
+		}
+		if connection != "" {
+			tabMeta[waveobj.MetaKey_ProjectConnection] = connection
+		}
+		if projectKey != "" {
+			tabMeta[waveobj.MetaKey_ProjectKey] = projectKey
+		}
 	}
 	tab, err := createTabObj(ctx, workspaceId, tabName, tabMeta)
 	if err != nil {
@@ -254,7 +263,7 @@ func CreateTab(ctx context.Context, workspaceId string, tabName string, activate
 
 	// No need to apply an initial layout for the initial launch, since the starter layout will get applied after onboarding modal dismissal
 	if !isInitialLaunch {
-		err = ApplyPortableLayout(ctx, tab.OID, GetNewTabLayout(cwd), true)
+		err = ApplyPortableLayout(ctx, tab.OID, GetNewTabLayout(cwd, connection), true)
 		if err != nil {
 			return tab.OID, fmt.Errorf("error applying new tab layout: %w", err)
 		}

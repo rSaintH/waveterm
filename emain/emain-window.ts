@@ -23,7 +23,9 @@ import { delay, ensureBoundsAreVisible, waveKeyToElectronKey } from "./emain-uti
 import { ElectronWshClient } from "./emain-wsh";
 import { updater } from "./updater";
 
-const DevInitTimeoutMs = 5000;
+// How long a dev tab may take to init before we show the window and pop devtools so you can
+// see what it is doing. Purely diagnostic: see awaitWithDevTimeout, which keeps waiting.
+const DevInitTimeoutMs = 30000;
 
 export type WindowOpts = {
     unamePlatform: NodeJS.Platform;
@@ -132,6 +134,8 @@ type WindowActionQueueEntry =
           op: "createtab";
           tabName?: string;
           cwd?: string;
+          connection?: string;
+          projectKey?: string;
       }
     | {
           op: "closetab";
@@ -456,23 +460,20 @@ export class WaveBrowserWindow extends BaseWindow {
         if (!isDev) {
             return promise;
         }
-        let timeoutHandle: ReturnType<typeof setTimeout> = null;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutHandle = setTimeout(() => {
-                console.log(
-                    `[dev] ${name} timed out after ${DevInitTimeoutMs}ms for tab ${tabId}, showing window for devtools`
-                );
-                if (!this.isDestroyed() && !this.isVisible()) {
-                    this.show();
-                }
-                if (this.activeTabView?.webContents && !this.activeTabView.webContents.isDevToolsOpened()) {
-                    this.activeTabView.webContents.openDevTools();
-                }
-                reject(new Error(`[dev] ${name} timed out after ${DevInitTimeoutMs}ms`));
-            }, DevInitTimeoutMs);
-        });
+        // Deliberately does not reject on timeout. This is a diagnostic aid, and rejecting here
+        // aborts initializeTab before the tab view is added to the window, which leaves a
+        // permanently blank window. A slow vite dev build must delay the tab, never lose it.
+        const timeoutHandle = setTimeout(() => {
+            console.log(`[dev] ${name} slow (over ${DevInitTimeoutMs}ms) for tab ${tabId}, showing window for devtools`);
+            if (!this.isDestroyed() && !this.isVisible()) {
+                this.show();
+            }
+            if (this.activeTabView?.webContents && !this.activeTabView.webContents.isDevToolsOpened()) {
+                this.activeTabView.webContents.openDevTools();
+            }
+        }, DevInitTimeoutMs);
         try {
-            return await Promise.race([promise, timeoutPromise]);
+            return await promise;
         } finally {
             clearTimeout(timeoutHandle);
         }
@@ -527,8 +528,14 @@ export class WaveBrowserWindow extends BaseWindow {
         }
     }
 
-    async queueCreateTab(opts?: { tabName?: string; cwd?: string }) {
-        await this._queueActionInternal({ op: "createtab", tabName: opts?.tabName, cwd: opts?.cwd });
+    async queueCreateTab(opts?: { tabName?: string; cwd?: string; connection?: string; projectKey?: string }) {
+        await this._queueActionInternal({
+            op: "createtab",
+            tabName: opts?.tabName,
+            cwd: opts?.cwd,
+            connection: opts?.connection,
+            projectKey: opts?.projectKey,
+        });
     }
 
     async queueCloseTab(tabId: string) {
@@ -568,7 +575,14 @@ export class WaveBrowserWindow extends BaseWindow {
                 // have to use "===" here to get the typechecker to work :/
                 switch (entry.op) {
                     case "createtab":
-                        tabId = await WorkspaceService.CreateTab(this.workspaceId, entry.tabName ?? null, true, entry.cwd ?? "");
+                        tabId = await WorkspaceService.CreateTab(
+                            this.workspaceId,
+                            entry.tabName ?? null,
+                            true,
+                            entry.cwd ?? "",
+                            entry.connection ?? "",
+                            entry.projectKey ?? ""
+                        );
                         break;
                     case "switchtab":
                         tabId = entry.tabId;
@@ -755,7 +769,9 @@ ipcMain.on("create-tab", async (event, opts) => {
     if (ww != null) {
         const tabName = typeof opts?.tabName === "string" ? opts.tabName : undefined;
         const cwd = typeof opts?.cwd === "string" ? opts.cwd : undefined;
-        await ww.queueCreateTab({ tabName, cwd });
+        const connection = typeof opts?.connection === "string" ? opts.connection : undefined;
+        const projectKey = typeof opts?.projectKey === "string" ? opts.projectKey : undefined;
+        await ww.queueCreateTab({ tabName, cwd, connection, projectKey });
     }
     event.returnValue = true;
     return null;

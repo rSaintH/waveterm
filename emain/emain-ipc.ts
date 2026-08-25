@@ -508,6 +508,27 @@ export function initIpcHandlers() {
         event.sender.reloadIgnoringCache();
     });
 
+    // Returns the chosen directory, or null when the user cancels.
+    electron.ipcMain.handle("select-directory", async (event, defaultPath?: string) => {
+        const opts: electron.OpenDialogOptions = {
+            title: "Select Directory",
+            properties: ["openDirectory", "createDirectory"],
+        };
+        if (defaultPath) {
+            opts.defaultPath = defaultPath;
+        }
+        // Tab views live inside a BaseWindow, so resolve the owning wave window to keep the
+        // dialog modal to it; fall back to a parentless dialog if it cannot be resolved.
+        const ww = getWaveWindowByWebContentsId(event.sender.hostWebContents?.id);
+        const result = ww
+            ? await electron.dialog.showOpenDialog(ww, opts)
+            : await electron.dialog.showOpenDialog(opts);
+        if (result.canceled || result.filePaths.length === 0) {
+            return null;
+        }
+        return result.filePaths[0];
+    });
+
     electron.ipcMain.handle("save-text-file", async (event, fileName: string, content: string) => {
         const ww = electron.BrowserWindow.fromWebContents(event.sender);
         if (ww == null) {

@@ -19,6 +19,17 @@ type MetaTSType struct {
 	PinnedUrl      string   `json:"pinnedurl,omitempty"`
 	Connection     string   `json:"connection,omitempty"`
 	Edit           bool     `json:"edit,omitempty"`
+
+	// Set on a tab created for a project. ProjectKey is the key in projects.json and is the
+	// source of truth: path/connection are cached here for convenience, but anything else
+	// (repourl, produrl, icon) is looked up from config so edits reach open tabs.
+	ProjectKey        string `json:"project:key,omitempty"`
+	ProjectPath       string `json:"project:path,omitempty"`
+	ProjectConnection string `json:"project:connection,omitempty"`
+	// Set on a widget's blockdef to open the active project's repo or production URL.
+	// Valid values: "repo", "prod".
+	ProjectUrl string `json:"project:url,omitempty"`
+
 	History        []string `json:"history,omitempty"`
 	HistoryForward []string `json:"history:forward,omitempty"`
 

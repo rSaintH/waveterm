@@ -334,7 +334,20 @@ export class PreviewModel implements ViewModel {
             const isCeView = loadableSV.state == "hasData" && loadableSV.data.specializedView == "codeedit";
             if (mimeType == "directory") {
                 const showHiddenFiles = get(this.showHiddenFiles);
+                const treeView = get(this.blockAtom)?.meta?.["preview:treeview"] ?? true;
                 return [
+                    {
+                        elemtype: "iconbutton",
+                        icon: treeView ? "list-tree" : "list",
+                        title: treeView ? "Hide Folder Tree" : "Show Folder Tree",
+                        // Stored on the block so each file browser remembers its own layout.
+                        click: () => {
+                            this.env.rpc.SetMetaCommand(TabRpcClient, {
+                                oref: WOS.makeORef("block", this.blockId),
+                                meta: { "preview:treeview": !treeView },
+                            });
+                        },
+                    },
                     {
                         elemtype: "iconbutton",
                         icon: showHiddenFiles ? "eye" : "eye-slash",

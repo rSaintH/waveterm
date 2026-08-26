@@ -29,6 +29,8 @@ import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } fr
 import { useDrag, useDrop } from "react-dnd";
 import { quote as shellQuote } from "shell-quote";
 import { debounce } from "throttle-debounce";
+import { DirectoryTree } from "./directory-tree";
+import { computeTreeAnchor } from "./directory-tree-utils";
 import "./directorypreview.scss";
 import { EntryManagerOverlay, EntryManagerOverlayProps, EntryManagerType } from "./entry-manager";
 import {
@@ -573,6 +575,16 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
     const finfo = useAtomValue(model.statFile);
     const dirPath = finfo?.path;
     const setErrorMsg = useSetAtom(model.errorMsgAtom);
+    const treeView = blockData?.meta?.["preview:treeview"] ?? true;
+    // The anchor is kept here rather than following dirPath, so opening a subfolder does not
+    // re-root the sidebar. computeTreeAnchor rebases only when you navigate outside it.
+    const [treeAnchor, setTreeAnchor] = useState("");
+    useEffect(() => {
+        if (!treeView || dirPath == null || dirPath == "") {
+            return;
+        }
+        setTreeAnchor((prev) => computeTreeAnchor(prev, dirPath));
+    }, [treeView, dirPath]);
 
     useEffect(() => {
         model.refreshCallback = () => {
@@ -583,58 +595,55 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
         };
     }, [setRefreshVersion]);
 
-    useEffect(
-        () => {
-            // The backend already streams the listing in chunks. Waiting for the stream to
-            // finish before painting threw that away and made every directory feel slow, so
-            // each chunk is rendered as it lands.
-            let cancelled = false;
-            const entries: FileInfo[] = [];
-            if (finfo?.dir && finfo?.path !== finfo?.dir) {
-                // Kept first so "up one level" is clickable from the first paint, and still
-                // present if the listing below fails.
-                entries.push({
-                    name: "..",
-                    path: finfo.dir,
-                    isdir: true,
-                    modtime: new Date().getTime(),
-                    mimetype: "directory",
-                });
-            }
-            setUnfilteredData([...entries]);
-            fireAndForget(async () => {
-                try {
-                    const remotePath = await model.formatRemoteUri(dirPath, globalStore.get);
-                    const stream = env.rpc.FileListStreamCommand(TabRpcClient, { path: remotePath }, null);
-                    for await (const chunk of stream) {
-                        // Navigating away mid-stream must not repaint the old directory over
-                        // the new one.
-                        if (cancelled) {
-                            return;
-                        }
-                        if (chunk?.fileinfo) {
-                            entries.push(...chunk.fileinfo);
-                            setUnfilteredData([...entries]);
-                        }
-                    }
-                } catch (e) {
+    useEffect(() => {
+        // The backend already streams the listing in chunks. Waiting for the stream to
+        // finish before painting threw that away and made every directory feel slow, so
+        // each chunk is rendered as it lands.
+        let cancelled = false;
+        const entries: FileInfo[] = [];
+        if (finfo?.dir && finfo?.path !== finfo?.dir) {
+            // Kept first so "up one level" is clickable from the first paint, and still
+            // present if the listing below fails.
+            entries.push({
+                name: "..",
+                path: finfo.dir,
+                isdir: true,
+                modtime: new Date().getTime(),
+                mimetype: "directory",
+            });
+        }
+        setUnfilteredData([...entries]);
+        fireAndForget(async () => {
+            try {
+                const remotePath = await model.formatRemoteUri(dirPath, globalStore.get);
+                const stream = env.rpc.FileListStreamCommand(TabRpcClient, { path: remotePath }, null);
+                for await (const chunk of stream) {
+                    // Navigating away mid-stream must not repaint the old directory over
+                    // the new one.
                     if (cancelled) {
                         return;
                     }
-                    console.error("Directory Read Error", e);
-                    setErrorMsg({
-                        status: "Cannot Read Directory",
-                        text: `${e}`,
-                    });
-                    setUnfilteredData([...entries]);
+                    if (chunk?.fileinfo) {
+                        entries.push(...chunk.fileinfo);
+                        setUnfilteredData([...entries]);
+                    }
                 }
-            });
-            return () => {
-                cancelled = true;
-            };
-        },
-        [conn, dirPath, refreshVersion]
-    );
+            } catch (e) {
+                if (cancelled) {
+                    return;
+                }
+                console.error("Directory Read Error", e);
+                setErrorMsg({
+                    status: "Cannot Read Directory",
+                    text: `${e}`,
+                });
+                setUnfilteredData([...entries]);
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [conn, dirPath, refreshVersion]);
 
     const filteredData = useMemo(
         () =>
@@ -884,32 +893,45 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
 
     return (
         <Fragment>
-            <div
-                ref={refs.setReference}
-                className="dir-table-container"
-                onChangeCapture={(e) => {
-                    const event = e as React.ChangeEvent<HTMLInputElement>;
-                    if (!entryManagerProps) {
-                        setSearchText(event.target.value.toLowerCase());
-                    }
-                }}
-                {...getReferenceProps()}
-                onContextMenu={(e) => handleFileContextMenu(e)}
-                onClick={() => setEntryManagerProps(undefined)}
-            >
-                <DirectoryTable
-                    model={model}
-                    data={filteredData}
-                    search={searchText}
-                    focusIndex={focusIndex}
-                    setFocusIndex={setFocusIndex}
-                    setSearch={setSearchText}
-                    setSelectedPath={setSelectedPath}
-                    setRefreshVersion={setRefreshVersion}
-                    entryManagerOverlayPropsAtom={entryManagerPropsAtom}
-                    newFile={newFile}
-                    newDirectory={newDirectory}
-                />
+            <div className={clsx("dir-preview-root", { "dir-preview-treemode": treeView })}>
+                {treeView && (
+                    <div className="dir-tree-sidebar">
+                        <DirectoryTree
+                            model={model}
+                            anchor={treeAnchor}
+                            currentPath={dirPath ?? ""}
+                            showHidden={showHiddenFiles}
+                            refreshVersion={refreshVersion}
+                        />
+                    </div>
+                )}
+                <div
+                    ref={refs.setReference}
+                    className="dir-table-container"
+                    onChangeCapture={(e) => {
+                        const event = e as React.ChangeEvent<HTMLInputElement>;
+                        if (!entryManagerProps) {
+                            setSearchText(event.target.value.toLowerCase());
+                        }
+                    }}
+                    {...getReferenceProps()}
+                    onContextMenu={(e) => handleFileContextMenu(e)}
+                    onClick={() => setEntryManagerProps(undefined)}
+                >
+                    <DirectoryTable
+                        model={model}
+                        data={filteredData}
+                        search={searchText}
+                        focusIndex={focusIndex}
+                        setFocusIndex={setFocusIndex}
+                        setSearch={setSearchText}
+                        setSelectedPath={setSelectedPath}
+                        setRefreshVersion={setRefreshVersion}
+                        entryManagerOverlayPropsAtom={entryManagerPropsAtom}
+                        newFile={newFile}
+                        newDirectory={newDirectory}
+                    />
+                </div>
             </div>
             {entryManagerProps && (
                 <EntryManagerOverlay

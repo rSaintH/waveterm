@@ -1099,6 +1099,7 @@ declare global {
         "project:key"?: string;
         "project:path"?: string;
         "project:connection"?: string;
+        "preview:treeview"?: boolean;
         "project:url"?: string;
         history?: string[];
         "history:forward"?: string[];

@@ -26,6 +26,9 @@ type MetaTSType struct {
 	ProjectKey        string `json:"project:key,omitempty"`
 	ProjectPath       string `json:"project:path,omitempty"`
 	ProjectConnection string `json:"project:connection,omitempty"`
+	// Per-block toggle for the file browser tree sidebar.
+	PreviewTreeView *bool `json:"preview:treeview,omitempty"`
+
 	// Set on a widget's blockdef to open the active project's repo or production URL.
 	// Valid values: "repo", "prod".
 	ProjectUrl string `json:"project:url,omitempty"`

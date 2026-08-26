@@ -153,9 +153,9 @@ func (s *Session) readStdout(stdout io.ReadCloser) {
 		}
 		ev, err := ParseStreamJSONLine(line)
 		if err != nil {
-			// Not fatal: the CLI can print a non-protocol line. Surface it rather than
-			// dropping it, so a startup message is not mistaken for silence.
-			ev = AgentEvent{Kind: EventKind_Other, Text: string(line)}
+			// Not fatal: the CLI can print a non-protocol line. Keep Raw as well as the
+			// text: dropping it made an unparseable line invisible while debugging.
+			ev = AgentEvent{Kind: EventKind_Other, Text: string(line), Raw: append([]byte(nil), line...)}
 		}
 		if ev.CostUSD > 0 {
 			s.lock.Lock()
@@ -204,6 +204,54 @@ func (s *Session) Send(text string) error {
 		return fmt.Errorf("cannot write to agent stdin: %w", err)
 	}
 	return nil
+}
+
+// writeControl sends a control line to a running session.
+func (s *Session) writeControl(line []byte) error {
+	s.lock.Lock()
+	stdin := s.stdin
+	closed := s.closed
+	s.lock.Unlock()
+	if closed {
+		return fmt.Errorf("session %s is closed", s.Id)
+	}
+	if stdin == nil {
+		return fmt.Errorf("session %s is not interactive", s.Id)
+	}
+	if _, err := stdin.Write(line); err != nil {
+		return fmt.Errorf("cannot write to agent stdin: %w", err)
+	}
+	return nil
+}
+
+// Interrupt cancels the current turn without ending the session, so the conversation and
+// its cost so far are kept. Killing the process would lose the ability to continue.
+func (s *Session) Interrupt(requestId string) error {
+	line, err := EncodeInterrupt(requestId)
+	if err != nil {
+		return err
+	}
+	return s.writeControl(line)
+}
+
+// SetPermissionMode changes the mode of the running session, so going from asking to
+// automatic does not require a restart.
+func (s *Session) SetPermissionMode(requestId string, mode string) error {
+	line, err := EncodeSetPermissionMode(requestId, mode)
+	if err != nil {
+		return err
+	}
+	return s.writeControl(line)
+}
+
+// RespondToTool answers a can_use_tool request. Without an answer the agent treats the tool
+// as denied, so leaving this unwired silently blocks work.
+func (s *Session) RespondToTool(requestId string, allow bool, denyMessage string) error {
+	line, err := EncodeToolDecision(requestId, allow, denyMessage)
+	if err != nil {
+		return err
+	}
+	return s.writeControl(line)
 }
 
 // Close stops the process. Safe to call more than once.

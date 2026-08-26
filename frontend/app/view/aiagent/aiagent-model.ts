@@ -18,6 +18,12 @@ export type ChatEntry = {
     text: string;
 };
 
+export type PendingTool = {
+    requestId: string;
+    toolName: string;
+    input: string;
+};
+
 export type SessionStatus = "idle" | "starting" | "running" | "stopped" | "error";
 
 export class AiAgentViewModel implements ViewModel {
@@ -38,6 +44,11 @@ export class AiAgentViewModel implements ViewModel {
     inputAtom: PrimitiveAtom<string>;
     errorAtom: PrimitiveAtom<string>;
     costAtom: PrimitiveAtom<number>;
+    permissionModeAtom: PrimitiveAtom<string>;
+    historyAtom: PrimitiveAtom<HistorySession[]>;
+    // A tool the agent is waiting on. The agent blocks until this is answered, so it has to
+    // be impossible to miss in the UI.
+    pendingToolAtom: PrimitiveAtom<PendingTool>;
     // Where the agent will run, derived from the tab's project.
     targetAtom: Atom<{ cwd: string; connection: string }>;
 
@@ -59,6 +70,10 @@ export class AiAgentViewModel implements ViewModel {
         this.inputAtom = atom("");
         this.errorAtom = atom(null) as PrimitiveAtom<string>;
         this.costAtom = atom(0);
+        // Empty means leave the CLI default rather than guessing a mode for the user.
+        this.permissionModeAtom = atom("");
+        this.historyAtom = atom<HistorySession[]>([]);
+        this.pendingToolAtom = atom(null) as PrimitiveAtom<PendingTool>;
 
         // The agent runs where the project lives. Without this a WSL project would get an
         // agent on the Windows side, looking at files that are not there.
@@ -99,7 +114,7 @@ export class AiAgentViewModel implements ViewModel {
         }
     }
 
-    async start(): Promise<void> {
+    async start(resumeSessionId?: string): Promise<void> {
         if (globalStore.get(this.statusAtom) == "running" || globalStore.get(this.statusAtom) == "starting") {
             return;
         }
@@ -113,11 +128,23 @@ export class AiAgentViewModel implements ViewModel {
         this.announcedReady = false;
         globalStore.set(this.statusAtom, "starting");
         globalStore.set(this.errorAtom, null);
-        this.append({ role: "status", text: `starting ${agentId}${connection ? ` on ${connection}` : ""}` });
+        globalStore.set(this.pendingToolAtom, null);
+        this.append({
+            role: "status",
+            text: `starting ${agentId}${connection ? ` on ${connection}` : ""}${resumeSessionId ? " (resuming)" : ""}`,
+        });
 
         const stream = this.env.rpc.AiAgentRunCommand(
             TabRpcClient,
-            { sessionid: this.sessionId, agentid: agentId, connection, cwd, interactive: true },
+            {
+                sessionid: this.sessionId,
+                agentid: agentId,
+                connection,
+                cwd,
+                interactive: true,
+                permissionmode: globalStore.get(this.permissionModeAtom) || undefined,
+                resumesessionid: resumeSessionId || undefined,
+            },
             null
         );
         fireAndForget(async () => {
@@ -166,6 +193,13 @@ export class AiAgentViewModel implements ViewModel {
                     this.append({ role: "error", text: ev.text || `failed (${ev.subtype ?? "unknown"})` });
                 }
                 break;
+            case "toolrequest":
+                globalStore.set(this.pendingToolAtom, {
+                    requestId: ev.requestid ?? "",
+                    toolName: ev.toolnames?.[0] ?? "unknown",
+                    input: ev.toolinput ? JSON.stringify(ev.toolinput, null, 2) : "",
+                });
+                break;
             case "ratelimit":
                 // Only surfaced when it is not the normal "allowed": a session dying on quota
                 // otherwise looks like a hang.
@@ -197,6 +231,70 @@ export class AiAgentViewModel implements ViewModel {
             await this.env.rpc.AiAgentSendCommand(TabRpcClient, { sessionid: this.sessionId, text });
         } catch (e) {
             globalStore.set(this.errorAtom, `Could not send: ${e?.message ?? e}`);
+        }
+    }
+
+    async loadHistory(): Promise<void> {
+        const { cwd, connection } = globalStore.get(this.targetAtom);
+        if (isBlank(cwd)) {
+            // Sessions are stored per working directory, so without one there is nothing
+            // to list rather than an error to show.
+            globalStore.set(this.historyAtom, []);
+            return;
+        }
+        try {
+            const list = await this.env.rpc.AiAgentHistoryCommand(TabRpcClient, { connection, cwd });
+            globalStore.set(this.historyAtom, list ?? []);
+        } catch (e) {
+            globalStore.set(this.errorAtom, `Could not read past sessions: ${e?.message ?? e}`);
+        }
+    }
+
+    // Cancels the current turn and keeps the session, unlike stop which ends it.
+    async interrupt(): Promise<void> {
+        if (this.sessionId == null) {
+            return;
+        }
+        try {
+            await this.env.rpc.AiAgentInterruptCommand(TabRpcClient, this.sessionId);
+            this.append({ role: "status", text: "interrupted" });
+        } catch (e) {
+            globalStore.set(this.errorAtom, `Could not interrupt: ${e?.message ?? e}`);
+        }
+    }
+
+    // Applied live when a session is running, and remembered for the next one otherwise.
+    async setPermissionMode(mode: string): Promise<void> {
+        globalStore.set(this.permissionModeAtom, mode);
+        if (this.sessionId == null || mode == "") {
+            return;
+        }
+        try {
+            await this.env.rpc.AiAgentSetPermissionModeCommand(TabRpcClient, {
+                sessionid: this.sessionId,
+                mode,
+            });
+            this.append({ role: "status", text: `permission mode: ${mode}` });
+        } catch (e) {
+            globalStore.set(this.errorAtom, `Could not change permission mode: ${e?.message ?? e}`);
+        }
+    }
+
+    async decideTool(allow: boolean): Promise<void> {
+        const pending = globalStore.get(this.pendingToolAtom);
+        if (pending == null || this.sessionId == null) {
+            return;
+        }
+        globalStore.set(this.pendingToolAtom, null);
+        this.append({ role: "status", text: `${allow ? "allowed" : "denied"} ${pending.toolName}` });
+        try {
+            await this.env.rpc.AiAgentToolDecisionCommand(TabRpcClient, {
+                sessionid: this.sessionId,
+                requestid: pending.requestId,
+                allow,
+            });
+        } catch (e) {
+            globalStore.set(this.errorAtom, `Could not answer the tool request: ${e?.message ?? e}`);
         }
     }
 

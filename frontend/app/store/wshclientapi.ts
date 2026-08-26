@@ -24,6 +24,18 @@ export class RpcApiType {
         return client.wshRpcCall("activity", data, opts);
     }
 
+    // command "aiagenthistory" [call]
+    AiAgentHistoryCommand(client: WshClient, data: AiAgentHistoryData, opts?: RpcOpts): Promise<HistorySession[]> {
+        if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "aiagenthistory", data, opts);
+        return client.wshRpcCall("aiagenthistory", data, opts);
+    }
+
+    // command "aiagentinterrupt" [call]
+    AiAgentInterruptCommand(client: WshClient, data: string, opts?: RpcOpts): Promise<void> {
+        if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "aiagentinterrupt", data, opts);
+        return client.wshRpcCall("aiagentinterrupt", data, opts);
+    }
+
     // command "aiagentlist" [call]
     AiAgentListCommand(client: WshClient, data: AiAgentListData, opts?: RpcOpts): Promise<DetectedAgent[]> {
         if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "aiagentlist", data, opts);
@@ -42,10 +54,22 @@ export class RpcApiType {
         return client.wshRpcCall("aiagentsend", data, opts);
     }
 
+    // command "aiagentsetpermissionmode" [call]
+    AiAgentSetPermissionModeCommand(client: WshClient, data: AiAgentPermissionModeData, opts?: RpcOpts): Promise<void> {
+        if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "aiagentsetpermissionmode", data, opts);
+        return client.wshRpcCall("aiagentsetpermissionmode", data, opts);
+    }
+
     // command "aiagentstop" [call]
     AiAgentStopCommand(client: WshClient, data: string, opts?: RpcOpts): Promise<void> {
         if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "aiagentstop", data, opts);
         return client.wshRpcCall("aiagentstop", data, opts);
+    }
+
+    // command "aiagenttooldecision" [call]
+    AiAgentToolDecisionCommand(client: WshClient, data: AiAgentToolDecisionData, opts?: RpcOpts): Promise<void> {
+        if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "aiagenttooldecision", data, opts);
+        return client.wshRpcCall("aiagenttooldecision", data, opts);
     }
 
     // command "aisendmessage" [call]

@@ -1,6 +1,7 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { Markdown } from "@/app/element/markdown";
 import type { AiAgentViewModel, ChatEntry } from "@/app/view/aiagent/aiagent-model";
 import { cn } from "@/util/util";
 import { useAtomValue } from "jotai";
@@ -25,7 +26,15 @@ const roleLabel: { [k in ChatEntry["role"]]: string } = {
 const Entry = memo(({ entry }: { entry: ChatEntry }) => (
     <div className="flex gap-2 text-xs leading-relaxed">
         <span className="shrink-0 w-12 text-right text-secondary select-none">{roleLabel[entry.role]}</span>
-        <span className={cn("whitespace-pre-wrap break-words min-w-0", roleStyle[entry.role])}>{entry.text}</span>
+        {/* Only the agent writes markdown; echoing a status line through the renderer would
+            mangle paths and punctuation. */}
+        {entry.role == "agent" ? (
+            <div className="min-w-0 flex-1">
+                <Markdown text={entry.text} />
+            </div>
+        ) : (
+            <span className={cn("whitespace-pre-wrap break-words min-w-0", roleStyle[entry.role])}>{entry.text}</span>
+        )}
     </div>
 ));
 Entry.displayName = "Entry";
@@ -35,6 +44,7 @@ const AgentPicker = memo(({ model }: { model: AiAgentViewModel }) => {
     const selected = useAtomValue(model.selectedAgentAtom);
     const status = useAtomValue(model.statusAtom);
     const target = useAtomValue(model.targetAtom);
+    const permissionMode = useAtomValue(model.permissionModeAtom);
     const running = status == "running" || status == "starting";
 
     const usable = agents.filter((a) => a.found && a.supported);
@@ -74,6 +84,29 @@ const AgentPicker = memo(({ model }: { model: AiAgentViewModel }) => {
                         Stop
                     </button>
                 )}
+                {running && (
+                    <button
+                        className="px-3 py-1 text-xs rounded border border-border hover:bg-secondary/50 cursor-pointer"
+                        title="Cancel the current turn but keep the session"
+                        onClick={() => model.interrupt()}
+                    >
+                        Interrupt
+                    </button>
+                )}
+                <select
+                    className="bg-background border border-border rounded px-2 py-1 text-xs text-primary"
+                    value={permissionMode}
+                    title="Permission mode"
+                    onChange={(e) => model.setPermissionMode(e.target.value)}
+                >
+                    <option value="">permissions: default</option>
+                    <option value="manual">ask (manual)</option>
+                    <option value="auto">auto</option>
+                    <option value="acceptEdits">accept edits</option>
+                    <option value="plan">plan</option>
+                    <option value="dontAsk">don&apos;t ask</option>
+                    <option value="bypassPermissions">bypass all</option>
+                </select>
                 <button
                     className="px-2 py-1 text-xs rounded border border-border hover:bg-secondary/50 cursor-pointer"
                     onClick={() => model.loadAgents()}
@@ -102,6 +135,64 @@ const AgentPicker = memo(({ model }: { model: AiAgentViewModel }) => {
 });
 AgentPicker.displayName = "AgentPicker";
 
+const ToolApproval = memo(({ model }: { model: AiAgentViewModel }) => {
+    const pending = useAtomValue(model.pendingToolAtom);
+    if (pending == null) {
+        return null;
+    }
+    return (
+        <div className="border-t border-accent bg-accent/10 p-3 flex flex-col gap-2">
+            <div className="text-xs font-semibold">
+                The agent wants to use <span className="text-accent">{pending.toolName}</span>
+            </div>
+            {pending.input != "" && (
+                <pre className="text-[11px] text-secondary max-h-32 overflow-auto whitespace-pre-wrap break-words">
+                    {pending.input}
+                </pre>
+            )}
+            <div className="flex gap-2 justify-end">
+                <button
+                    className="px-3 py-1 text-xs rounded border border-border hover:bg-secondary/50 cursor-pointer"
+                    onClick={() => model.decideTool(false)}
+                >
+                    Deny
+                </button>
+                <button
+                    className="px-3 py-1 text-xs rounded bg-accent text-background hover:opacity-80 cursor-pointer"
+                    onClick={() => model.decideTool(true)}
+                >
+                    Allow
+                </button>
+            </div>
+        </div>
+    );
+});
+ToolApproval.displayName = "ToolApproval";
+
+const HistoryList = memo(({ model }: { model: AiAgentViewModel }) => {
+    const history = useAtomValue(model.historyAtom);
+    const status = useAtomValue(model.statusAtom);
+    if (history.length == 0 || status == "running" || status == "starting") {
+        return null;
+    }
+    return (
+        <div className="flex flex-col gap-1 p-3 border-b border-border">
+            <div className="text-[10px] uppercase tracking-wide text-secondary">Past sessions</div>
+            {history.map((h) => (
+                <button
+                    key={h.sessionid}
+                    className="text-left text-xs text-primary hover:bg-hoverbg rounded px-1 py-0.5 cursor-pointer truncate"
+                    title={h.sessionid}
+                    onClick={() => model.start(h.sessionid)}
+                >
+                    {h.title || h.sessionid}
+                </button>
+            ))}
+        </div>
+    );
+});
+HistoryList.displayName = "HistoryList";
+
 export const AiAgentView = memo(({ model }: ViewComponentProps<AiAgentViewModel>) => {
     const entries = useAtomValue(model.entriesAtom);
     const status = useAtomValue(model.statusAtom);
@@ -112,6 +203,7 @@ export const AiAgentView = memo(({ model }: ViewComponentProps<AiAgentViewModel>
 
     useEffect(() => {
         model.loadAgents();
+        model.loadHistory();
     }, []);
 
     // Follow the conversation as it grows; an agent turn can be long.
@@ -127,6 +219,7 @@ export const AiAgentView = memo(({ model }: ViewComponentProps<AiAgentViewModel>
     return (
         <div className="flex flex-col h-full min-h-0">
             <AgentPicker model={model} />
+            <HistoryList model={model} />
             <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto flex flex-col gap-1 p-3">
                 {entries.length == 0 && (
                     <div className="text-xs text-secondary">
@@ -137,6 +230,7 @@ export const AiAgentView = memo(({ model }: ViewComponentProps<AiAgentViewModel>
                     <Entry key={e.id} entry={e} />
                 ))}
             </div>
+            <ToolApproval model={model} />
             {error != null && <div className="px-3 pb-2 text-xs text-error">{error}</div>}
             <div className="flex items-center gap-2 border-t border-border p-2">
                 <input

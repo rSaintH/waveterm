@@ -165,6 +165,11 @@ type SessionOpts struct {
 	Prompt string `json:"prompt,omitempty"`
 	// When true the session stays open and reads further prompts from stdin.
 	Interactive bool `json:"interactive,omitempty"`
+	// One of the CLI permission modes: acceptEdits, auto, bypassPermissions, manual,
+	// dontAsk, plan. Empty leaves the CLI default.
+	PermissionMode string `json:"permissionmode,omitempty"`
+	// Session id to resume. The transcript lives in the agent CLI store, not in Wave.
+	ResumeSessionId string `json:"resumesessionid,omitempty"`
 }
 
 // BuildArgs returns the CLI arguments for a session. The binary itself is resolved
@@ -182,6 +187,12 @@ func BuildArgs(opts SessionOpts) ([]string, error) {
 	}
 	// --verbose is required for stream-json to emit anything beyond the final result.
 	args := []string{"--print", "--output-format=stream-json", "--verbose"}
+	if opts.PermissionMode != "" {
+		args = append(args, "--permission-mode", opts.PermissionMode)
+	}
+	if opts.ResumeSessionId != "" {
+		args = append(args, "--resume", opts.ResumeSessionId)
+	}
 	if opts.Interactive {
 		args = append(args, "--input-format=stream-json")
 	} else {

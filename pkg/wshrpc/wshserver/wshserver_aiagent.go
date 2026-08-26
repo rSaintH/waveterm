@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/wavetermdev/waveterm/pkg/aiagent"
 	"github.com/wavetermdev/waveterm/pkg/panichandler"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc"
@@ -41,11 +42,13 @@ func (ws *WshServer) AiAgentRunCommand(ctx context.Context, data wshrpc.AiAgentR
 	// Deliberately not tied to ctx: the rpc context ends with the call, while the session
 	// must outlive it and be stopped explicitly with AiAgentStopCommand.
 	sess, err := aiagent.StartSession(context.Background(), data.SessionId, aiagent.SessionOpts{
-		AgentId:     data.AgentId,
-		Cwd:         data.Cwd,
-		Connection:  data.Connection,
-		Prompt:      data.Prompt,
-		Interactive: data.Interactive,
+		AgentId:         data.AgentId,
+		Cwd:             data.Cwd,
+		Connection:      data.Connection,
+		Prompt:          data.Prompt,
+		Interactive:     data.Interactive,
+		PermissionMode:  data.PermissionMode,
+		ResumeSessionId: data.ResumeSessionId,
 	})
 	if err != nil {
 		go func() {
@@ -89,4 +92,34 @@ func (ws *WshServer) AiAgentStopCommand(ctx context.Context, sessionId string) e
 	}
 	agentSessions.Remove(sessionId)
 	return nil
+}
+
+func (ws *WshServer) AiAgentHistoryCommand(ctx context.Context, data wshrpc.AiAgentHistoryData) ([]aiagent.HistorySession, error) {
+	return aiagent.ListHistory(ctx, data.Connection, data.Cwd)
+}
+
+// AiAgentInterruptCommand cancels the current turn but keeps the session, so the
+// conversation and the work done so far survive. Stopping would throw both away.
+func (ws *WshServer) AiAgentInterruptCommand(ctx context.Context, sessionId string) error {
+	sess := agentSessions.Get(sessionId)
+	if sess == nil {
+		return fmt.Errorf("no running session %s", sessionId)
+	}
+	return sess.Interrupt("interrupt-" + uuid.NewString())
+}
+
+func (ws *WshServer) AiAgentSetPermissionModeCommand(ctx context.Context, data wshrpc.AiAgentPermissionModeData) error {
+	sess := agentSessions.Get(data.SessionId)
+	if sess == nil {
+		return fmt.Errorf("no running session %s", data.SessionId)
+	}
+	return sess.SetPermissionMode("setmode-"+uuid.NewString(), data.Mode)
+}
+
+func (ws *WshServer) AiAgentToolDecisionCommand(ctx context.Context, data wshrpc.AiAgentToolDecisionData) error {
+	sess := agentSessions.Get(data.SessionId)
+	if sess == nil {
+		return fmt.Errorf("no running session %s", data.SessionId)
+	}
+	return sess.RespondToTool(data.RequestId, data.Allow, data.Message)
 }

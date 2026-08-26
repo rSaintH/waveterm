@@ -24,6 +24,18 @@ func ActivityCommand(w *wshutil.WshRpc, data wshrpc.ActivityUpdate, opts *wshrpc
 	return err
 }
 
+// command "aiagenthistory", wshserver.AiAgentHistoryCommand
+func AiAgentHistoryCommand(w *wshutil.WshRpc, data wshrpc.AiAgentHistoryData, opts *wshrpc.RpcOpts) ([]aiagent.HistorySession, error) {
+	resp, err := sendRpcRequestCallHelper[[]aiagent.HistorySession](w, "aiagenthistory", data, opts)
+	return resp, err
+}
+
+// command "aiagentinterrupt", wshserver.AiAgentInterruptCommand
+func AiAgentInterruptCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpts) error {
+	_, err := sendRpcRequestCallHelper[any](w, "aiagentinterrupt", data, opts)
+	return err
+}
+
 // command "aiagentlist", wshserver.AiAgentListCommand
 func AiAgentListCommand(w *wshutil.WshRpc, data wshrpc.AiAgentListData, opts *wshrpc.RpcOpts) ([]aiagent.DetectedAgent, error) {
 	resp, err := sendRpcRequestCallHelper[[]aiagent.DetectedAgent](w, "aiagentlist", data, opts)
@@ -41,9 +53,21 @@ func AiAgentSendCommand(w *wshutil.WshRpc, data wshrpc.AiAgentSendData, opts *ws
 	return err
 }
 
+// command "aiagentsetpermissionmode", wshserver.AiAgentSetPermissionModeCommand
+func AiAgentSetPermissionModeCommand(w *wshutil.WshRpc, data wshrpc.AiAgentPermissionModeData, opts *wshrpc.RpcOpts) error {
+	_, err := sendRpcRequestCallHelper[any](w, "aiagentsetpermissionmode", data, opts)
+	return err
+}
+
 // command "aiagentstop", wshserver.AiAgentStopCommand
 func AiAgentStopCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpts) error {
 	_, err := sendRpcRequestCallHelper[any](w, "aiagentstop", data, opts)
+	return err
+}
+
+// command "aiagenttooldecision", wshserver.AiAgentToolDecisionCommand
+func AiAgentToolDecisionCommand(w *wshutil.WshRpc, data wshrpc.AiAgentToolDecisionData, opts *wshrpc.RpcOpts) error {
+	_, err := sendRpcRequestCallHelper[any](w, "aiagenttooldecision", data, opts)
 	return err
 }
 

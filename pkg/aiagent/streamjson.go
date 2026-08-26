@@ -27,6 +27,10 @@ const (
 	EventKind_Result EventKind = "result"
 	// Quota status. Worth surfacing: it is how a session dies without an error.
 	EventKind_RateLimit EventKind = "ratelimit"
+	// The agent is asking whether a tool may run (can_use_tool).
+	EventKind_ToolRequest EventKind = "toolrequest"
+	// Reply to a control request we sent (interrupt, set_permission_mode).
+	EventKind_ControlResponse EventKind = "controlresponse"
 	// A line we parsed as JSON but do not model. Kept rather than dropped so the UI can
 	// still show something and new message types do not look like a hang.
 	EventKind_Other EventKind = "other"
@@ -45,6 +49,11 @@ type AgentEvent struct {
 	IsError   bool     `json:"iserror,omitempty"`
 	// Set on a result line. "success", "error_max_turns", etc.
 	Subtype string `json:"subtype,omitempty"`
+	// Correlation id of a control message. Required to answer a tool request: without it
+	// the UI has nothing to reply to.
+	RequestId string `json:"requestid,omitempty"`
+	// Raw tool input on a tool request, so the user can judge what is being asked.
+	ToolInput json.RawMessage `json:"toolinput,omitempty"`
 	// Populated on rate-limit lines: "allowed", "rejected", ...
 	RateLimitStatus string  `json:"ratelimitstatus,omitempty"`
 	CostUSD         float64 `json:"costusd,omitempty"`
@@ -77,6 +86,11 @@ type wire struct {
 // a valid line of an unmodelled type comes back as EventKind_Other rather than an error,
 // because the agent adding a message type must not break the session.
 func ParseStreamJSONLine(line []byte) (AgentEvent, error) {
+	// The control channel shares the stream, so it has to be recognised first: a
+	// control_request has no "type" we would otherwise model.
+	if ev, _, ok := ParseControlLine(line); ok {
+		return ev, nil
+	}
 	var w wire
 	if err := json.Unmarshal(line, &w); err != nil {
 		return AgentEvent{}, fmt.Errorf("not valid stream-json: %w", err)

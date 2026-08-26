@@ -90,14 +90,28 @@ declare global {
         cwd?: string;
         iserror?: boolean;
         subtype?: string;
+        requestid?: string;
+        toolinput?: string;
         ratelimitstatus?: string;
         costusd?: number;
         raw?: string;
     };
 
+    // wshrpc.AiAgentHistoryData
+    type AiAgentHistoryData = {
+        connection?: string;
+        cwd: string;
+    };
+
     // wshrpc.AiAgentListData
     type AiAgentListData = {
         connection?: string;
+    };
+
+    // wshrpc.AiAgentPermissionModeData
+    type AiAgentPermissionModeData = {
+        sessionid: string;
+        mode: string;
     };
 
     // wshrpc.AiAgentRunData
@@ -108,12 +122,22 @@ declare global {
         cwd?: string;
         prompt?: string;
         interactive?: boolean;
+        permissionmode?: string;
+        resumesessionid?: string;
     };
 
     // wshrpc.AiAgentSendData
     type AiAgentSendData = {
         sessionid: string;
         text: string;
+    };
+
+    // wshrpc.AiAgentToolDecisionData
+    type AiAgentToolDecisionData = {
+        sessionid: string;
+        requestid: string;
+        allow: boolean;
+        message?: string;
     };
 
     // wshrpc.AiMessageData
@@ -1071,6 +1095,14 @@ declare global {
         configerrors: ConfigError[];
         version: string;
         buildtime: string;
+    };
+
+    // aiagent.HistorySession
+    type HistorySession = {
+        sessionid: string;
+        title?: string;
+        cwd?: string;
+        modtime?: number;
     };
 
     // waveobj.Job

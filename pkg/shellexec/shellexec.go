@@ -26,6 +26,7 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/remote/conncontroller"
 	"github.com/wavetermdev/waveterm/pkg/util/pamparse"
 	"github.com/wavetermdev/waveterm/pkg/util/shellutil"
+	"github.com/wavetermdev/waveterm/pkg/util/utilfn"
 	"github.com/wavetermdev/waveterm/pkg/wavebase"
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc"
@@ -261,9 +262,7 @@ func StartWslShellProc(ctx context.Context, termSize waveobj.TermSize, cmdStr st
 		}
 		cmdCombined = fmt.Sprintf("%s %s", shellPath, strings.Join(shellOpts, " "))
 	} else {
-		// TODO check quoting of cmdStr
-		shellOpts = append(shellOpts, "-c", cmdStr)
-		cmdCombined = fmt.Sprintf("%s %s", shellPath, strings.Join(shellOpts, " "))
+		cmdCombined = ComposeRemoteCommand(shellPath, shellOpts, cmdStr)
 	}
 	conn.Infof(ctx, "starting shell, using command: %s\n", cmdCombined)
 	conn.Infof(ctx, "WSL-NEWSESSION (StartWslShellProc)\n")
@@ -420,9 +419,7 @@ func StartRemoteShellProc(ctx context.Context, logCtx context.Context, termSize 
 		}
 		cmdCombined = fmt.Sprintf("%s %s", shellPath, strings.Join(shellOpts, " "))
 	} else {
-		// TODO check quoting of cmdStr
-		shellOpts = append(shellOpts, "-c", cmdStr)
-		cmdCombined = fmt.Sprintf("%s %s", shellPath, strings.Join(shellOpts, " "))
+		cmdCombined = ComposeRemoteCommand(shellPath, shellOpts, cmdStr)
 	}
 	conn.Infof(logCtx, "starting shell, using command: %s\n", cmdCombined)
 	conn.Infof(logCtx, "SSH-NEWSESSION (StartRemoteShellProc)\n")
@@ -780,4 +777,15 @@ func tryGetPamEnvVars() map[string]string {
 		envVars["XDG_DATA_DIRS"] = "/usr/local/share:/usr/share"
 	}
 	return envVars
+}
+
+// ComposeRemoteCommand builds the string that is handed to `sh -c` on the far side of a
+// connection to run a single command.
+//
+// The command has to survive one more round of word splitting there, so it is quoted as one
+// token. Unquoted, "bash -c claude --resume <id>" hands bash the command "claude" and turns
+// the rest into positional parameters, silently dropping every argument.
+func ComposeRemoteCommand(shellPath string, shellOpts []string, cmdStr string) string {
+	opts := append(append([]string{}, shellOpts...), "-c", utilfn.ShellQuote(cmdStr, true, -1))
+	return fmt.Sprintf("%s %s", shellPath, strings.Join(opts, " "))
 }

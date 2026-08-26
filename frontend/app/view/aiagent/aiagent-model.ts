@@ -174,7 +174,10 @@ export class AiAgentViewModel implements ViewModel {
         const meta: MetaType = {
             view: "term",
             controller: "cmd",
-            cmd: agent.bin,
+            // The absolute path from detection, not the bare name: the command runs in a
+            // non-login shell, so PATH additions like ~/.local/bin or nvm are not there and
+            // the bare name would not resolve.
+            cmd: agent.path || agent.bin,
             // Args go in cmd:args rather than the command string: a session id or a mode
             // never needs shell parsing, and quoting them would be a way to get it wrong.
             "cmd:args": args,

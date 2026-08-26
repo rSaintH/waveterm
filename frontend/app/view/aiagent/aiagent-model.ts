@@ -10,6 +10,9 @@ import type { AiAgentEnv } from "@/app/view/aiagent/aiagentenv";
 import { fireAndForget, isBlank } from "@/util/util";
 import { atom, type Atom, type PrimitiveAtom } from "jotai";
 
+// Mirrors aiagent.SessionPlaceholder on the go side.
+const SESSION_PLACEHOLDER = "{session}";
+
 // This panel launches the agent into a real terminal block instead of driving its stdio
 // protocol. The protocol route was built first and hit a wall: the CLI asks for tool
 // permission through an MCP tool named by --permission-prompt-tool, and Wave has no MCP
@@ -130,8 +133,15 @@ export class AiAgentViewModel implements ViewModel {
         }
     }
 
-    // Launches the agent in a terminal block. resumeSessionId continues a past conversation.
-    async launch(resumeSessionId?: string): Promise<void> {
+    // The id can sit anywhere in the template, so it is substituted rather than appended:
+    // claude forks with --resume <id> --fork-session.
+    private applySessionTemplate(template: string[], sessionId: string): string[] {
+        return template.map((a) => (a == SESSION_PLACEHOLDER ? sessionId : a));
+    }
+
+    // Launches the agent in a terminal block. sessionId continues or forks a past
+    // conversation, depending on mode.
+    async launch(sessionId?: string, mode: "new" | "resume" | "fork" = "new"): Promise<void> {
         const agents = globalStore.get(this.agentsAtom);
         const agentId = globalStore.get(this.selectedAgentAtom);
         const agent = agents.find((a) => a.id == agentId);
@@ -147,14 +157,19 @@ export class AiAgentViewModel implements ViewModel {
         // Only pass flags the selected CLI actually accepts: an unknown flag stops it from
         // starting at all, which would look like the panel being broken.
         const args: string[] = [];
-        // Resume goes first: for codex it is a subcommand, and a subcommand has to lead the
-        // argv. The shape comes from the catalog rather than being assumed here.
-        if (!isBlank(resumeSessionId) && agent.resumeargs?.length > 0) {
-            args.push(...agent.resumeargs, resumeSessionId);
+        // The session template goes first: for codex resume and fork are subcommands, and a
+        // subcommand has to lead the argv.
+        if (!isBlank(sessionId) && mode != "new") {
+            const template = mode == "fork" ? agent.forkargs : agent.resumeargs;
+            if (template == null || template.length == 0) {
+                globalStore.set(this.errorAtom, `${agent.label} cannot ${mode} a session`);
+                return;
+            }
+            args.push(...this.applySessionTemplate(template, sessionId));
         }
-        const mode = globalStore.get(this.permissionModeAtom);
-        if (!isBlank(mode) && agent.permissionmodeflag) {
-            args.push("--permission-mode", mode);
+        const permMode = globalStore.get(this.permissionModeAtom);
+        if (!isBlank(permMode) && agent.permissionmodeflag) {
+            args.push("--permission-mode", permMode);
         }
         const meta: MetaType = {
             view: "term",

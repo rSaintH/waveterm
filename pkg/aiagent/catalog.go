@@ -12,6 +12,9 @@ import (
 	"strings"
 )
 
+// SessionPlaceholder marks where a session id goes in an argv template.
+const SessionPlaceholder = "{session}"
+
 // AgentDef is a coding-agent CLI we know how to look for and launch.
 type AgentDef struct {
 	Id    string `json:"id"`
@@ -25,9 +28,11 @@ type AgentDef struct {
 	// CLI does not know stops it from starting, so this is per agent rather than assumed.
 	PermissionModeFlag bool     `json:"permissionmodeflag"`
 	PermissionModes    []string `json:"permissionmodes,omitempty"`
-	// Argv that resumes a session, with the session id appended. The shape differs: Claude
-	// Code takes a flag, Codex takes a subcommand. Empty means resume is not wired.
+	// Argv templates for continuing a past session, with SessionPlaceholder standing in for
+	// the id. A template rather than a prefix because the id is not always last: Claude Code
+	// forks with --resume <id> --fork-session. Empty means the action is not wired.
 	ResumeArgs []string `json:"resumeargs,omitempty"`
+	ForkArgs   []string `json:"forkargs,omitempty"`
 	// Whether this package can read the agent's stored sessions.
 	HistorySupported bool `json:"historysupported"`
 	// Anything the user should know about this agent.
@@ -51,7 +56,8 @@ var Catalog = []AgentDef{
 		// The choices --permission-mode accepts. "manual" is last on purpose: with no
 		// permission-prompt tool registered it denies rather than asks.
 		PermissionModes:  []string{"auto", "acceptEdits", "plan", "dontAsk", "bypassPermissions", "manual"},
-		ResumeArgs:       []string{"--resume"},
+		ResumeArgs:       []string{"--resume", SessionPlaceholder},
+		ForkArgs:         []string{"--resume", SessionPlaceholder, "--fork-session"},
 		HistorySupported: true,
 	},
 	{
@@ -62,8 +68,9 @@ var Catalog = []AgentDef{
 		// codex-cli 0.147.0 has no --permission-mode; approvals and sandboxing live in its
 		// own config.
 		PermissionModeFlag: false,
-		// A subcommand, not a flag: `codex resume <id>`.
-		ResumeArgs:       []string{"resume"},
+		// Subcommands, not flags: `codex resume <id>` and `codex fork <id>`.
+		ResumeArgs:       []string{"resume", SessionPlaceholder},
+		ForkArgs:         []string{"fork", SessionPlaceholder},
 		HistorySupported: true,
 	},
 	{
@@ -71,9 +78,10 @@ var Catalog = []AgentDef{
 		Label:     "Gemini CLI",
 		Bin:       "gemini",
 		Supported: true,
-		// --resume with no id continues the most recent session. Resuming a specific one is
-		// not wired because the store lives under a project hash whose derivation could not
-		// be verified without the CLI installed, so listing sessions would be a guess.
+		// No placeholder: --resume with no id continues the most recent session. Resuming a
+		// specific one is not wired because the store lives under a project hash whose
+		// derivation could not be verified without the CLI installed, so listing sessions
+		// would be a guess. Gemini has no documented fork.
 		ResumeArgs:       []string{"--resume"},
 		HistorySupported: false,
 		Note:             "past sessions are not listed here; use /resume inside gemini",
@@ -91,6 +99,7 @@ type DetectedAgent struct {
 	PermissionModeFlag bool     `json:"permissionmodeflag"`
 	PermissionModes    []string `json:"permissionmodes,omitempty"`
 	ResumeArgs         []string `json:"resumeargs,omitempty"`
+	ForkArgs           []string `json:"forkargs,omitempty"`
 	HistorySupported   bool     `json:"historysupported"`
 	Note               string   `json:"note,omitempty"`
 	Found              bool     `json:"found"`
@@ -140,6 +149,7 @@ func DetectAgents(ctx context.Context, connName string) ([]DetectedAgent, error)
 			PermissionModeFlag: def.PermissionModeFlag,
 			PermissionModes:    def.PermissionModes,
 			ResumeArgs:         def.ResumeArgs,
+			ForkArgs:           def.ForkArgs,
 			HistorySupported:   def.HistorySupported,
 			Note:               def.Note,
 		}

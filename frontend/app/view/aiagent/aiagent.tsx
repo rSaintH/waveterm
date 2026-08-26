@@ -97,6 +97,7 @@ export const AiAgentView = memo(({ model }: ViewComponentProps<AiAgentViewModel>
     // only actionable for an agent that takes that flag.
     const selectedAgent = agents.find((a) => a.id == selectedId);
     const canList = selectedAgent?.historysupported ?? false;
+    const canFork = (selectedAgent?.forkargs?.length ?? 0) > 0;
 
     useEffect(() => {
         model.refresh();
@@ -123,14 +124,26 @@ export const AiAgentView = memo(({ model }: ViewComponentProps<AiAgentViewModel>
                 )}
                 {canList &&
                     history.map((h) => (
-                        <button
-                            key={h.sessionid}
-                            className="text-left text-xs text-primary hover:bg-hoverbg rounded px-1 py-1 cursor-pointer truncate"
-                            title={`resume ${h.sessionid}`}
-                            onClick={() => model.launch(h.sessionid)}
-                        >
-                            {h.title || h.sessionid}
-                        </button>
+                        <div key={h.sessionid} className="group flex items-center gap-1">
+                            <button
+                                className="flex-1 min-w-0 text-left text-xs text-primary hover:bg-hoverbg rounded px-1 py-1 cursor-pointer truncate"
+                                title={`resume ${h.sessionid}`}
+                                onClick={() => model.launch(h.sessionid, "resume")}
+                            >
+                                {h.title || h.sessionid}
+                            </button>
+                            {/* Forking starts a new session from this point and leaves the
+                                original untouched. */}
+                            {canFork && (
+                                <button
+                                    className="shrink-0 px-1.5 py-0.5 text-[10px] rounded border border-border text-secondary hover:bg-secondary/50 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Fork into a new session, keeping the original"
+                                    onClick={() => model.launch(h.sessionid, "fork")}
+                                >
+                                    fork
+                                </button>
+                            )}
+                        </div>
                     ))}
             </div>
             <div className="border-t border-border px-3 py-2 text-[10px] text-secondary">

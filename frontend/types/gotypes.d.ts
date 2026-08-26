@@ -907,6 +907,7 @@ declare global {
         permissionmodeflag: boolean;
         permissionmodes?: string[];
         resumeargs?: string[];
+        forkargs?: string[];
         historysupported: boolean;
         note?: string;
         found: boolean;

@@ -100,21 +100,63 @@ func TestPermissionModesAndFlagAgree(t *testing.T) {
 	}
 }
 
-// Resume argv differs per CLI: claude takes a flag, codex takes a subcommand. Getting this
-// wrong means the agent does not start.
-func TestResumeArgsShape(t *testing.T) {
-	want := map[string][]string{
-		"claude": {"--resume"},
-		"codex":  {"resume"},
-		"gemini": {"--resume"},
+// Resume and fork argv differ per CLI: claude takes flags, codex takes subcommands, and
+// the id is not always last. Getting this wrong means the agent does not start.
+func TestSessionArgTemplates(t *testing.T) {
+	want := map[string]struct{ resume, fork []string }{
+		"claude": {
+			resume: []string{"--resume", SessionPlaceholder},
+			fork:   []string{"--resume", SessionPlaceholder, "--fork-session"},
+		},
+		"codex": {
+			resume: []string{"resume", SessionPlaceholder},
+			fork:   []string{"fork", SessionPlaceholder},
+		},
+		// No placeholder: --resume with no id continues the most recent session.
+		"gemini": {resume: []string{"--resume"}, fork: nil},
+	}
+	same := func(a, b []string) bool {
+		if len(a) != len(b) {
+			return false
+		}
+		for i := range a {
+			if a[i] != b[i] {
+				return false
+			}
+		}
+		return true
 	}
 	for _, def := range Catalog {
 		exp, ok := want[def.Id]
 		if !ok {
 			continue
 		}
-		if len(def.ResumeArgs) != len(exp) || (len(exp) > 0 && def.ResumeArgs[0] != exp[0]) {
-			t.Errorf("%s resumeargs = %v, want %v", def.Id, def.ResumeArgs, exp)
+		if !same(def.ResumeArgs, exp.resume) {
+			t.Errorf("%s resumeargs = %v, want %v", def.Id, def.ResumeArgs, exp.resume)
+		}
+		if !same(def.ForkArgs, exp.fork) {
+			t.Errorf("%s forkargs = %v, want %v", def.Id, def.ForkArgs, exp.fork)
+		}
+	}
+}
+
+// A template that takes an id must say where it goes, or the id is silently dropped and the
+// agent opens the wrong session.
+func TestTemplatesWithAnIdCarryThePlaceholder(t *testing.T) {
+	for _, def := range Catalog {
+		for label, tmpl := range map[string][]string{"resume": def.ResumeArgs, "fork": def.ForkArgs} {
+			if len(tmpl) < 2 {
+				continue
+			}
+			found := false
+			for _, a := range tmpl {
+				if a == SessionPlaceholder {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("%s %s template has no placeholder: %v", def.Id, label, tmpl)
+			}
 		}
 	}
 }

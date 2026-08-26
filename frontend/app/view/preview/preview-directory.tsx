@@ -584,35 +584,55 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
     }, [setRefreshVersion]);
 
     useEffect(
-        () =>
+        () => {
+            // The backend already streams the listing in chunks. Waiting for the stream to
+            // finish before painting threw that away and made every directory feel slow, so
+            // each chunk is rendered as it lands.
+            let cancelled = false;
+            const entries: FileInfo[] = [];
+            if (finfo?.dir && finfo?.path !== finfo?.dir) {
+                // Kept first so "up one level" is clickable from the first paint, and still
+                // present if the listing below fails.
+                entries.push({
+                    name: "..",
+                    path: finfo.dir,
+                    isdir: true,
+                    modtime: new Date().getTime(),
+                    mimetype: "directory",
+                });
+            }
+            setUnfilteredData([...entries]);
             fireAndForget(async () => {
-                const entries: FileInfo[] = [];
                 try {
                     const remotePath = await model.formatRemoteUri(dirPath, globalStore.get);
                     const stream = env.rpc.FileListStreamCommand(TabRpcClient, { path: remotePath }, null);
                     for await (const chunk of stream) {
+                        // Navigating away mid-stream must not repaint the old directory over
+                        // the new one.
+                        if (cancelled) {
+                            return;
+                        }
                         if (chunk?.fileinfo) {
                             entries.push(...chunk.fileinfo);
+                            setUnfilteredData([...entries]);
                         }
                     }
-                    if (finfo?.dir && finfo?.path !== finfo?.dir) {
-                        entries.unshift({
-                            name: "..",
-                            path: finfo.dir,
-                            isdir: true,
-                            modtime: new Date().getTime(),
-                            mimetype: "directory",
-                        });
-                    }
                 } catch (e) {
+                    if (cancelled) {
+                        return;
+                    }
                     console.error("Directory Read Error", e);
                     setErrorMsg({
                         status: "Cannot Read Directory",
                         text: `${e}`,
                     });
+                    setUnfilteredData([...entries]);
                 }
-                setUnfilteredData(entries);
-            }),
+            });
+            return () => {
+                cancelled = true;
+            };
+        },
         [conn, dirPath, refreshVersion]
     );
 

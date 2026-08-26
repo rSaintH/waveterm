@@ -15,5 +15,5 @@ func (ws *WshServer) AiAgentListCommand(ctx context.Context, data wshrpc.AiAgent
 }
 
 func (ws *WshServer) AiAgentHistoryCommand(ctx context.Context, data wshrpc.AiAgentHistoryData) ([]aiagent.HistorySession, error) {
-	return aiagent.ListHistory(ctx, data.Connection, data.Cwd)
+	return aiagent.ListHistory(ctx, data.Connection, data.AgentId, data.Cwd)
 }

@@ -74,23 +74,73 @@ func TestDetectedAgentCarriesPathWhenFound(t *testing.T) {
 	}
 }
 
-// Only Claude Code takes --permission-mode and --resume. Passing either to another CLI would
-// stop it from starting, so the flags are per agent rather than assumed.
-func TestOnlyClaudeDeclaresTheClaudeFlags(t *testing.T) {
+// Only Claude Code takes --permission-mode. Passing it to another CLI would stop it from
+// starting, so the flag is declared per agent rather than assumed.
+func TestOnlyClaudeTakesPermissionMode(t *testing.T) {
 	for _, def := range Catalog {
 		if def.Id == "claude" {
-			if !def.PermissionModeFlag || !def.ResumeFlag {
-				t.Errorf("claude should declare both flags: %+v", def)
+			if !def.PermissionModeFlag || len(def.PermissionModes) == 0 {
+				t.Errorf("claude should declare the flag and its modes: %+v", def)
 			}
 			continue
 		}
-		if def.PermissionModeFlag || def.ResumeFlag {
-			t.Errorf("%s must not claim claude's flags: %+v", def.Id, def)
+		if def.PermissionModeFlag {
+			t.Errorf("%s does not take --permission-mode: %+v", def.Id, def)
+		}
+	}
+}
+
+// Declaring modes without the flag, or the flag without modes, would give the UI a dropdown
+// that cannot work.
+func TestPermissionModesAndFlagAgree(t *testing.T) {
+	for _, def := range Catalog {
+		if def.PermissionModeFlag != (len(def.PermissionModes) > 0) {
+			t.Errorf("%s: flag=%v but %d modes", def.Id, def.PermissionModeFlag, len(def.PermissionModes))
+		}
+	}
+}
+
+// Resume argv differs per CLI: claude takes a flag, codex takes a subcommand. Getting this
+// wrong means the agent does not start.
+func TestResumeArgsShape(t *testing.T) {
+	want := map[string][]string{
+		"claude": {"--resume"},
+		"codex":  {"resume"},
+		"gemini": {"--resume"},
+	}
+	for _, def := range Catalog {
+		exp, ok := want[def.Id]
+		if !ok {
+			continue
+		}
+		if len(def.ResumeArgs) != len(exp) || (len(exp) > 0 && def.ResumeArgs[0] != exp[0]) {
+			t.Errorf("%s resumeargs = %v, want %v", def.Id, def.ResumeArgs, exp)
+		}
+	}
+}
+
+// History is only claimed for stores this package can actually read.
+func TestHistorySupportMatchesReaders(t *testing.T) {
+	readable := map[string]bool{"claude": true, "codex": true}
+	for _, def := range Catalog {
+		if def.HistorySupported != readable[def.Id] {
+			t.Errorf("%s: historysupported=%v but reader present=%v", def.Id, def.HistorySupported, readable[def.Id])
+		}
+		// An agent without history has to say why, or the panel shows an empty list with no
+		// explanation.
+		if !def.HistorySupported && def.Note == "" {
+			t.Errorf("%s has no history and no note", def.Id)
 		}
 	}
 }
 
 // An agent that cannot be launched needs a reason, or the UI has nothing to say about it.
+func TestListHistoryUnknownAgent(t *testing.T) {
+	if _, err := ListHistory(context.Background(), "", "nope", "/tmp"); err == nil {
+		t.Errorf("expected an error for an unknown agent id")
+	}
+}
+
 func TestUnsupportedCatalogEntriesExplainWhy(t *testing.T) {
 	for _, def := range Catalog {
 		if !def.Supported && def.Note == "" {
@@ -114,20 +164,20 @@ func TestEncodeProjectDir(t *testing.T) {
 }
 
 func TestListHistoryNeedsCwd(t *testing.T) {
-	if _, err := ListHistory(context.Background(), "", ""); err == nil {
+	if _, err := ListHistory(context.Background(), "", "claude", ""); err == nil {
 		t.Errorf("expected an error without a working directory")
 	}
 }
 
 func TestListHistoryRejectsSsh(t *testing.T) {
-	if _, err := ListHistory(context.Background(), "user@host", "/tmp"); err == nil {
+	if _, err := ListHistory(context.Background(), "user@host", "claude", "/tmp"); err == nil {
 		t.Errorf("expected an error for an ssh connection")
 	}
 }
 
 // A directory with no stored sessions is a normal new project, not a failure.
 func TestListHistoryUnknownDirIsEmptyNotError(t *testing.T) {
-	got, err := ListHistory(context.Background(), "", `C:\definitely\not\a\real\project\dir`)
+	got, err := ListHistory(context.Background(), "", "claude", `C:\definitely\not\a\real\project\dir`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

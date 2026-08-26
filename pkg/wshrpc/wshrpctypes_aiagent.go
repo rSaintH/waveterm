@@ -22,5 +22,6 @@ type AiAgentListData struct {
 
 type AiAgentHistoryData struct {
 	Connection string `json:"connection,omitempty"`
+	AgentId    string `json:"agentid"`
 	Cwd        string `json:"cwd"`
 }

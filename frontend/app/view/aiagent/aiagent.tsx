@@ -43,12 +43,13 @@ const AgentControls = memo(({ model }: { model: AiAgentViewModel }) => {
                     onChange={(e) => model.updatePermissionMode(e.target.value)}
                 >
                     <option value="">permissions: default</option>
-                    <option value="auto">auto</option>
-                    <option value="acceptEdits">accept edits</option>
-                    <option value="plan">plan</option>
-                    <option value="dontAsk">don&apos;t ask</option>
-                    <option value="bypassPermissions">bypass all</option>
-                    <option value="manual">manual (denies the rest)</option>
+                    {/* The modes come from the catalog so the list cannot drift from what
+                        the CLI accepts. */}
+                    {(current?.permissionmodes ?? []).map((m) => (
+                        <option key={m} value={m}>
+                            {m == "manual" ? "manual (denies the rest)" : m}
+                        </option>
+                    ))}
                 </select>
                 <button
                     className="px-3 py-1 text-xs rounded bg-accent text-background hover:opacity-80 cursor-pointer disabled:opacity-50"
@@ -94,7 +95,8 @@ export const AiAgentView = memo(({ model }: ViewComponentProps<AiAgentViewModel>
     const selectedId = useAtomValue(model.selectedAgentAtom);
     // Past sessions come from the claude store and are reopened with --resume, so they are
     // only actionable for an agent that takes that flag.
-    const canResume = agents.find((a) => a.id == selectedId)?.resumeflag ?? false;
+    const selectedAgent = agents.find((a) => a.id == selectedId);
+    const canList = selectedAgent?.historysupported ?? false;
 
     useEffect(() => {
         model.refresh();
@@ -107,17 +109,19 @@ export const AiAgentView = memo(({ model }: ViewComponentProps<AiAgentViewModel>
             <div className="flex-1 min-h-0 overflow-auto p-3 flex flex-col gap-1">
                 <div className="text-[10px] uppercase tracking-wide text-secondary">Past sessions</div>
                 {isLoading && <div className="text-xs text-secondary">Looking…</div>}
-                {!isLoading && !canResume && (
-                    <div className="text-xs text-secondary">The selected agent keeps its own session history.</div>
+                {!isLoading && !canList && (
+                    <div className="text-xs text-secondary">
+                        {selectedAgent?.note ?? "The selected agent keeps its own session history."}
+                    </div>
                 )}
-                {!isLoading && canResume && history.length == 0 && (
+                {!isLoading && canList && history.length == 0 && (
                     <div className="text-xs text-secondary">
                         {target.cwd == ""
                             ? "Open this panel in a project tab to see its sessions."
                             : "No sessions yet for this directory."}
                     </div>
                 )}
-                {canResume &&
+                {canList &&
                     history.map((h) => (
                         <button
                             key={h.sessionid}

@@ -1,6 +1,8 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+// Package aiagent finds coding-agent CLIs and reads the session history they already keep,
+// so the GUI can launch one into a terminal block with the right project context.
 package aiagent
 
 import (
@@ -10,29 +12,35 @@ import (
 	"strings"
 )
 
-// AgentDef is a coding-agent CLI we know how to look for.
+// AgentDef is a coding-agent CLI we know how to look for and launch.
 type AgentDef struct {
 	Id    string `json:"id"`
 	Label string `json:"label"`
 	Bin   string `json:"bin"`
-	// Sessions run in a terminal block, so any interactive CLI qualifies. This is false only
-	// for an agent we know cannot be launched that way. Reported rather than hidden, so
-	// "I have it installed but it is not listed" never happens.
+	// Sessions run in a terminal block, so any interactive CLI qualifies. False only for an
+	// agent we know cannot be launched that way. Reported rather than hidden, so "I have it
+	// installed but it is not listed" never happens.
 	Supported bool `json:"supported"`
-	// Whether the CLI accepts --permission-mode. Claude Code does; the others manage
-	// permissions their own way, and passing the flag would just fail to start.
-	PermissionModeFlag bool `json:"permissionmodeflag"`
-	// Whether the CLI accepts --resume <id>, which is what makes a past session clickable.
-	ResumeFlag bool `json:"resumeflag"`
-	// Anything the user should know about this agent here.
+	// Whether the CLI accepts --permission-mode, and the values it takes. Passing a flag a
+	// CLI does not know stops it from starting, so this is per agent rather than assumed.
+	PermissionModeFlag bool     `json:"permissionmodeflag"`
+	PermissionModes    []string `json:"permissionmodes,omitempty"`
+	// Argv that resumes a session, with the session id appended. The shape differs: Claude
+	// Code takes a flag, Codex takes a subcommand. Empty means resume is not wired.
+	ResumeArgs []string `json:"resumeargs,omitempty"`
+	// Whether this package can read the agent's stored sessions.
+	HistorySupported bool `json:"historysupported"`
+	// Anything the user should know about this agent.
 	Note string `json:"note,omitempty"`
 }
 
 // Catalog is ordered: the first supported agent found is the sensible default.
 //
-// Running the agent in a terminal is what makes this list short. Driving a protocol would
-// need one implementation per CLI (stream-json for claude, an experimental JSON-RPC
-// app-server for codex, ACP for gemini); launching an interactive CLI needs none.
+// Running the agent in a terminal is what keeps this small. Driving a protocol would need
+// one implementation per CLI (stream-json for claude, an experimental JSON-RPC app-server
+// for codex, ACP for gemini); launching an interactive CLI needs none.
+//
+// Verified against claude 2.1.241 and codex-cli 0.147.0.
 var Catalog = []AgentDef{
 	{
 		Id:                 "claude",
@@ -40,24 +48,35 @@ var Catalog = []AgentDef{
 		Bin:                "claude",
 		Supported:          true,
 		PermissionModeFlag: true,
-		ResumeFlag:         true,
+		// The choices --permission-mode accepts. "manual" is last on purpose: with no
+		// permission-prompt tool registered it denies rather than asks.
+		PermissionModes:  []string{"auto", "acceptEdits", "plan", "dontAsk", "bypassPermissions", "manual"},
+		ResumeArgs:       []string{"--resume"},
+		HistorySupported: true,
 	},
 	{
 		Id:        "codex",
 		Label:     "Codex CLI",
 		Bin:       "codex",
 		Supported: true,
-		// codex-cli 0.147.0 has no --permission-mode; sandbox and approval settings live in
-		// its own config. Session listing is not wired either, since its transcripts are
-		// not in the claude store this panel reads.
-		Note: "permission mode and past sessions are managed by codex itself",
+		// codex-cli 0.147.0 has no --permission-mode; approvals and sandboxing live in its
+		// own config.
+		PermissionModeFlag: false,
+		// A subcommand, not a flag: `codex resume <id>`.
+		ResumeArgs:       []string{"resume"},
+		HistorySupported: true,
 	},
 	{
 		Id:        "gemini",
 		Label:     "Gemini CLI",
 		Bin:       "gemini",
 		Supported: true,
-		Note:      "permission mode and past sessions are managed by gemini itself",
+		// --resume with no id continues the most recent session. Resuming a specific one is
+		// not wired because the store lives under a project hash whose derivation could not
+		// be verified without the CLI installed, so listing sessions would be a guess.
+		ResumeArgs:       []string{"--resume"},
+		HistorySupported: false,
+		Note:             "past sessions are not listed here; use /resume inside gemini",
 	},
 }
 
@@ -65,15 +84,26 @@ var Catalog = []AgentDef{
 // rather than embedding AgentDef, because the typescript generator flattens embedded structs
 // inconsistently.
 type DetectedAgent struct {
-	Id                 string `json:"id"`
-	Label              string `json:"label"`
-	Bin                string `json:"bin"`
-	Supported          bool   `json:"supported"`
-	PermissionModeFlag bool   `json:"permissionmodeflag"`
-	ResumeFlag         bool   `json:"resumeflag"`
-	Note               string `json:"note,omitempty"`
-	Found              bool   `json:"found"`
-	Path               string `json:"path,omitempty"`
+	Id                 string   `json:"id"`
+	Label              string   `json:"label"`
+	Bin                string   `json:"bin"`
+	Supported          bool     `json:"supported"`
+	PermissionModeFlag bool     `json:"permissionmodeflag"`
+	PermissionModes    []string `json:"permissionmodes,omitempty"`
+	ResumeArgs         []string `json:"resumeargs,omitempty"`
+	HistorySupported   bool     `json:"historysupported"`
+	Note               string   `json:"note,omitempty"`
+	Found              bool     `json:"found"`
+	Path               string   `json:"path,omitempty"`
+}
+
+func lookupAgentDef(id string) (AgentDef, error) {
+	for _, def := range Catalog {
+		if def.Id == id {
+			return def, nil
+		}
+	}
+	return AgentDef{}, fmt.Errorf("unknown agent %q", id)
 }
 
 // WslDistroFromConn returns the distro for a wsl:// connection, or "" for anything else.
@@ -91,10 +121,10 @@ func IsLocalConn(connName string) bool {
 
 // DetectAgents reports which catalog agents exist on the given connection. An agent that is
 // not installed is returned with Found=false rather than omitted, so the UI can tell the
-// difference between "not installed" and "installed but unsupported".
+// difference between "not installed" and "installed but not launchable".
 //
-// Only local and wsl:// connections are resolved; ssh returns an error rather than
-// silently claiming nothing is installed.
+// Only local and wsl:// connections are resolved; ssh returns an error rather than silently
+// claiming nothing is installed.
 func DetectAgents(ctx context.Context, connName string) ([]DetectedAgent, error) {
 	distro := WslDistroFromConn(connName)
 	if !IsLocalConn(connName) && distro == "" {
@@ -108,7 +138,9 @@ func DetectAgents(ctx context.Context, connName string) ([]DetectedAgent, error)
 			Bin:                def.Bin,
 			Supported:          def.Supported,
 			PermissionModeFlag: def.PermissionModeFlag,
-			ResumeFlag:         def.ResumeFlag,
+			PermissionModes:    def.PermissionModes,
+			ResumeArgs:         def.ResumeArgs,
+			HistorySupported:   def.HistorySupported,
 			Note:               def.Note,
 		}
 		var path string

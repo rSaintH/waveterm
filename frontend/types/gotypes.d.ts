@@ -83,6 +83,7 @@ declare global {
     // wshrpc.AiAgentHistoryData
     type AiAgentHistoryData = {
         connection?: string;
+        agentid: string;
         cwd: string;
     };
 
@@ -904,7 +905,9 @@ declare global {
         bin: string;
         supported: boolean;
         permissionmodeflag: boolean;
-        resumeflag: boolean;
+        permissionmodes?: string[];
+        resumeargs?: string[];
+        historysupported: boolean;
         note?: string;
         found: boolean;
         path?: string;

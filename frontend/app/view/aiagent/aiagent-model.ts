@@ -7,7 +7,7 @@ import type { TabModel } from "@/app/store/tab-model";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { AiAgentView } from "@/app/view/aiagent/aiagent";
 import type { AiAgentEnv } from "@/app/view/aiagent/aiagentenv";
-import { isBlank } from "@/util/util";
+import { fireAndForget, isBlank } from "@/util/util";
 import { atom, type Atom, type PrimitiveAtom } from "jotai";
 
 // This panel launches the agent into a real terminal block instead of driving its stdio
@@ -72,6 +72,9 @@ export class AiAgentViewModel implements ViewModel {
 
     updateSelected(agentId: string) {
         globalStore.set(this.selectedAgentAtom, agentId);
+        // Each agent has its own store, so the list has to follow the selection.
+        globalStore.set(this.historyAtom, []);
+        fireAndForget(() => this.loadHistory());
     }
 
     updatePermissionMode(mode: string) {
@@ -81,7 +84,9 @@ export class AiAgentViewModel implements ViewModel {
     async refresh(): Promise<void> {
         globalStore.set(this.isLoadingAtom, true);
         try {
-            await Promise.all([this.loadAgents(), this.loadHistory()]);
+            // Detection first: the history reader is chosen by the selected agent.
+            await this.loadAgents();
+            await this.loadHistory();
         } finally {
             globalStore.set(this.isLoadingAtom, false);
         }
@@ -106,14 +111,19 @@ export class AiAgentViewModel implements ViewModel {
 
     async loadHistory(): Promise<void> {
         const { cwd, connection } = globalStore.get(this.targetAtom);
-        if (isBlank(cwd)) {
+        const agentId = globalStore.get(this.selectedAgentAtom);
+        if (isBlank(cwd) || isBlank(agentId)) {
             // Sessions are stored per working directory, so without one there is nothing to
             // list rather than an error to show.
             globalStore.set(this.historyAtom, []);
             return;
         }
         try {
-            const list = await this.env.rpc.AiAgentHistoryCommand(TabRpcClient, { connection, cwd });
+            const list = await this.env.rpc.AiAgentHistoryCommand(TabRpcClient, {
+                connection,
+                agentid: agentId,
+                cwd,
+            });
             globalStore.set(this.historyAtom, list ?? []);
         } catch (e) {
             globalStore.set(this.errorAtom, `Could not read past sessions: ${e?.message ?? e}`);
@@ -137,12 +147,14 @@ export class AiAgentViewModel implements ViewModel {
         // Only pass flags the selected CLI actually accepts: an unknown flag stops it from
         // starting at all, which would look like the panel being broken.
         const args: string[] = [];
+        // Resume goes first: for codex it is a subcommand, and a subcommand has to lead the
+        // argv. The shape comes from the catalog rather than being assumed here.
+        if (!isBlank(resumeSessionId) && agent.resumeargs?.length > 0) {
+            args.push(...agent.resumeargs, resumeSessionId);
+        }
         const mode = globalStore.get(this.permissionModeAtom);
         if (!isBlank(mode) && agent.permissionmodeflag) {
             args.push("--permission-mode", mode);
-        }
-        if (!isBlank(resumeSessionId) && agent.resumeflag) {
-            args.push("--resume", resumeSessionId);
         }
         const meta: MetaType = {
             view: "term",

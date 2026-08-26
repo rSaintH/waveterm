@@ -7,6 +7,7 @@ import { AiFileDiffViewModel } from "@/app/view/aifilediff/aifilediff";
 import { LauncherViewModel } from "@/app/view/launcher/launcher";
 import { PreviewModel } from "@/app/view/preview/preview-model";
 import { ProcessViewerViewModel } from "@/app/view/processviewer/processviewer";
+import { AiAgentViewModel } from "@/app/view/aiagent/aiagent-model";
 import { ProjectPanelViewModel } from "@/app/view/projectpanel/projectpanel-model";
 import { SysinfoViewModel } from "@/app/view/sysinfo/sysinfo";
 import { TsunamiViewModel } from "@/app/view/tsunami/tsunami";
@@ -37,6 +38,7 @@ BlockRegistry.set("aifilediff", AiFileDiffViewModel);
 BlockRegistry.set("waveconfig", WaveConfigViewModel);
 BlockRegistry.set("processviewer", ProcessViewerViewModel);
 BlockRegistry.set("projectpanel", ProjectPanelViewModel);
+BlockRegistry.set("aiagent", AiAgentViewModel);
 
 function makeDefaultViewModel(viewType: string): ViewModel {
     const viewModel: ViewModel = {

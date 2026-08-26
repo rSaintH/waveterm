@@ -6,6 +6,7 @@
 package wshclient
 
 import (
+	"github.com/wavetermdev/waveterm/pkg/aiagent"
 	"github.com/wavetermdev/waveterm/pkg/aiusechat/uctypes"
 	"github.com/wavetermdev/waveterm/pkg/baseds"
 	"github.com/wavetermdev/waveterm/pkg/telemetry/telemetrydata"
@@ -20,6 +21,29 @@ import (
 // command "activity", wshserver.ActivityCommand
 func ActivityCommand(w *wshutil.WshRpc, data wshrpc.ActivityUpdate, opts *wshrpc.RpcOpts) error {
 	_, err := sendRpcRequestCallHelper[any](w, "activity", data, opts)
+	return err
+}
+
+// command "aiagentlist", wshserver.AiAgentListCommand
+func AiAgentListCommand(w *wshutil.WshRpc, data wshrpc.AiAgentListData, opts *wshrpc.RpcOpts) ([]aiagent.DetectedAgent, error) {
+	resp, err := sendRpcRequestCallHelper[[]aiagent.DetectedAgent](w, "aiagentlist", data, opts)
+	return resp, err
+}
+
+// command "aiagentrun", wshserver.AiAgentRunCommand
+func AiAgentRunCommand(w *wshutil.WshRpc, data wshrpc.AiAgentRunData, opts *wshrpc.RpcOpts) chan wshrpc.RespOrErrorUnion[aiagent.AgentEvent] {
+	return sendRpcRequestResponseStreamHelper[aiagent.AgentEvent](w, "aiagentrun", data, opts)
+}
+
+// command "aiagentsend", wshserver.AiAgentSendCommand
+func AiAgentSendCommand(w *wshutil.WshRpc, data wshrpc.AiAgentSendData, opts *wshrpc.RpcOpts) error {
+	_, err := sendRpcRequestCallHelper[any](w, "aiagentsend", data, opts)
+	return err
+}
+
+// command "aiagentstop", wshserver.AiAgentStopCommand
+func AiAgentStopCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpts) error {
+	_, err := sendRpcRequestCallHelper[any](w, "aiagentstop", data, opts)
 	return err
 }
 

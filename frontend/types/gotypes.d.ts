@@ -80,6 +80,42 @@ declare global {
         conn?: {[key: string]: number};
     };
 
+    // aiagent.AgentEvent
+    type AgentEvent = {
+        kind: string;
+        sessionid?: string;
+        text?: string;
+        toolnames?: string[];
+        model?: string;
+        cwd?: string;
+        iserror?: boolean;
+        subtype?: string;
+        ratelimitstatus?: string;
+        costusd?: number;
+        raw?: string;
+    };
+
+    // wshrpc.AiAgentListData
+    type AiAgentListData = {
+        connection?: string;
+    };
+
+    // wshrpc.AiAgentRunData
+    type AiAgentRunData = {
+        sessionid: string;
+        agentid: string;
+        connection?: string;
+        cwd?: string;
+        prompt?: string;
+        interactive?: boolean;
+    };
+
+    // wshrpc.AiAgentSendData
+    type AiAgentSendData = {
+        sessionid: string;
+        text: string;
+    };
+
     // wshrpc.AiMessageData
     type AiMessageData = {
         message?: string;
@@ -884,6 +920,18 @@ declare global {
     type CpuDataRequest = {
         id: string;
         count: number;
+    };
+
+    // aiagent.DetectedAgent
+    type DetectedAgent = {
+        id: string;
+        label: string;
+        bin: string;
+        protocol: string;
+        supported: boolean;
+        note?: string;
+        found: boolean;
+        path?: string;
     };
 
     // wshrpc.DirEntryOut

@@ -53,7 +53,7 @@ var Catalog = []AgentDef{
 		Bin:       "codex",
 		Protocol:  Protocol_Acp,
 		Supported: false,
-		Note:      "codex has no stream-json or ACP mode; only an MCP server and an experimental app-server",
+		Note:      "driveable via its experimental app-server (JSON-RPC), which this fork does not implement yet",
 	},
 	{
 		Id:        "gemini",
@@ -65,11 +65,18 @@ var Catalog = []AgentDef{
 	},
 }
 
-// DetectedAgent is one catalog entry resolved against a machine.
+// DetectedAgent is one catalog entry resolved against a machine. Fields are spelled out
+// rather than embedding AgentDef, because the typescript generator flattens embedded structs
+// inconsistently.
 type DetectedAgent struct {
-	AgentDef
-	Found bool   `json:"found"`
-	Path  string `json:"path,omitempty"`
+	Id        string   `json:"id"`
+	Label     string   `json:"label"`
+	Bin       string   `json:"bin"`
+	Protocol  Protocol `json:"protocol"`
+	Supported bool     `json:"supported"`
+	Note      string   `json:"note,omitempty"`
+	Found     bool     `json:"found"`
+	Path      string   `json:"path,omitempty"`
 }
 
 func lookupAgentDef(id string) (AgentDef, error) {
@@ -107,7 +114,14 @@ func DetectAgents(ctx context.Context, connName string) ([]DetectedAgent, error)
 	}
 	rtn := make([]DetectedAgent, 0, len(Catalog))
 	for _, def := range Catalog {
-		det := DetectedAgent{AgentDef: def}
+		det := DetectedAgent{
+			Id:        def.Id,
+			Label:     def.Label,
+			Bin:       def.Bin,
+			Protocol:  def.Protocol,
+			Supported: def.Supported,
+			Note:      def.Note,
+		}
 		var path string
 		var err error
 		if distro != "" {

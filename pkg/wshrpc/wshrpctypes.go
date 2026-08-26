@@ -177,6 +177,9 @@ type WshRpcInterface interface {
 	// terminal
 	TermGetScrollbackLinesCommand(ctx context.Context, data CommandTermGetScrollbackLinesData) (*CommandTermGetScrollbackLinesRtnData, error)
 
+	// coding agents
+	WshRpcAiAgentInterface
+
 	// file
 	WshRpcFileInterface
 	WaveFileReadStreamCommand(ctx context.Context, data CommandWaveFileReadStreamData) (*WaveFileInfo, error)

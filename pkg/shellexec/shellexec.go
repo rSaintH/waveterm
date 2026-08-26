@@ -152,11 +152,23 @@ func (pp *PipePty) WriteString(s string) (n int, err error) {
 	return pp.Write([]byte(s))
 }
 
+// wslStartDirArgs picks the starting directory for a wsl.exe invocation. Wave historically
+// hardcoded "~", which silently ignored cmd:cwd, so a project tab on a WSL connection always
+// opened in the home directory. The cwd here is a path inside the distro, so it must not be
+// touched by any local path handling.
+func wslStartDirArgs(cwd string) []string {
+	if cwd == "" {
+		return []string{"~"}
+	}
+	return []string{"--cd", cwd}
+}
+
 func StartWslShellProcNoWsh(ctx context.Context, termSize waveobj.TermSize, cmdStr string, cmdOpts CommandOptsType, conn *wslconn.WslConn) (*ShellProc, error) {
 	client := conn.GetClient()
 	conn.Infof(ctx, "WSL-NEWSESSION (StartWslShellProcNoWsh)")
 
-	ecmd := exec.Command("wsl.exe", "~", "-d", client.Name())
+	wslArgs := append(wslStartDirArgs(cmdOpts.Cwd), "-d", client.Name())
+	ecmd := exec.Command("wsl.exe", wslArgs...)
 
 	if termSize.Rows == 0 || termSize.Cols == 0 {
 		termSize.Rows = shellutil.DefaultTermRows
@@ -274,7 +286,8 @@ func StartWslShellProc(ctx context.Context, termSize waveobj.TermSize, cmdStr st
 		cmdCombined = fmt.Sprintf(`%s=%s %s`, wavebase.WaveJwtTokenVarName, jwtToken, cmdCombined)
 	}
 	log.Printf("full combined command: %s", cmdCombined)
-	ecmd := exec.Command("wsl.exe", "~", "-d", client.Name(), "--", "sh", "-c", cmdCombined)
+	wslArgs := append(wslStartDirArgs(cmdOpts.Cwd), "-d", client.Name(), "--", "sh", "-c", cmdCombined)
+	ecmd := exec.Command("wsl.exe", wslArgs...)
 	if termSize.Rows == 0 || termSize.Cols == 0 {
 		termSize.Rows = shellutil.DefaultTermRows
 		termSize.Cols = shellutil.DefaultTermCols

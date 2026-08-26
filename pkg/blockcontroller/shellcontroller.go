@@ -403,7 +403,11 @@ func (bc *ShellController) setupAndStartShellProcess(logCtx context.Context, rc 
 		cmdOpts.Interactive = true
 		cmdOpts.Login = true
 		cmdOpts.Cwd = blockMeta.GetString(waveobj.MetaKey_CmdCwd, "")
-		if cmdOpts.Cwd != "" {
+		// Only resolve the cwd against the local filesystem for local connections. On a remote
+		// connection the path belongs to the other machine: ExpandHomeDir would resolve "~" to
+		// the local home and filepath.Clean would rewrite "/home/x" as "\home\x" on Windows,
+		// both of which corrupt a perfectly good remote path.
+		if cmdOpts.Cwd != "" && conncontroller.IsLocalConnName(remoteName) {
 			cwdPath, err := wavebase.ExpandHomeDir(cmdOpts.Cwd)
 			if err != nil {
 				return nil, err

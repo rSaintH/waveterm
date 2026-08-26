@@ -46,8 +46,10 @@ export class AiAgentViewModel implements ViewModel {
     costAtom: PrimitiveAtom<number>;
     permissionModeAtom: PrimitiveAtom<string>;
     historyAtom: PrimitiveAtom<HistorySession[]>;
-    // A tool the agent is waiting on. The agent blocks until this is answered, so it has to
-    // be impossible to miss in the UI.
+    // A tool the agent is waiting on. Currently unreachable with the claude CLI: it asks for
+    // permission through a --permission-prompt-tool MCP tool, not over the control channel,
+    // and Wave has no MCP server to register. Kept wired because the plumbing is tested and
+    // is what an MCP permission tool would feed.
     pendingToolAtom: PrimitiveAtom<PendingTool>;
     // Where the agent will run, derived from the tab's project.
     targetAtom: Atom<{ cwd: string; connection: string }>;

@@ -100,12 +100,14 @@ const AgentPicker = memo(({ model }: { model: AiAgentViewModel }) => {
                     onChange={(e) => model.setPermissionMode(e.target.value)}
                 >
                     <option value="">permissions: default</option>
-                    <option value="manual">ask (manual)</option>
                     <option value="auto">auto</option>
                     <option value="acceptEdits">accept edits</option>
                     <option value="plan">plan</option>
                     <option value="dontAsk">don&apos;t ask</option>
                     <option value="bypassPermissions">bypass all</option>
+                    {/* Not labelled "ask": with no permission-prompt tool registered the CLI
+                        denies anything not already allowed instead of asking. */}
+                    <option value="manual">manual (denies the rest)</option>
                 </select>
                 <button
                     className="px-2 py-1 text-xs rounded border border-border hover:bg-secondary/50 cursor-pointer"

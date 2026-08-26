@@ -42,6 +42,9 @@ export class AiAgentViewModel implements ViewModel {
     targetAtom: Atom<{ cwd: string; connection: string }>;
 
     private sessionId: string = null;
+    // The CLI emits an init line at the start of every turn, not just once per session, so
+    // the ready line has to be gated or the transcript fills with duplicates.
+    private announcedReady = false;
 
     constructor({ blockId, nodeModel, tabModel, waveEnv }: ViewModelInitType) {
         this.blockId = blockId;
@@ -107,6 +110,7 @@ export class AiAgentViewModel implements ViewModel {
         }
         const { cwd, connection } = globalStore.get(this.targetAtom);
         this.sessionId = uuidv7();
+        this.announcedReady = false;
         globalStore.set(this.statusAtom, "starting");
         globalStore.set(this.errorAtom, null);
         this.append({ role: "status", text: `starting ${agentId}${connection ? ` on ${connection}` : ""}` });
@@ -137,10 +141,13 @@ export class AiAgentViewModel implements ViewModel {
         switch (ev.kind) {
             case "init":
                 globalStore.set(this.statusAtom, "running");
-                this.append({
-                    role: "status",
-                    text: `ready${ev.model ? ` · ${ev.model}` : ""}${ev.cwd ? ` · ${ev.cwd}` : ""}`,
-                });
+                if (!this.announcedReady) {
+                    this.announcedReady = true;
+                    this.append({
+                        role: "status",
+                        text: `ready${ev.model ? ` · ${ev.model}` : ""}${ev.cwd ? ` · ${ev.cwd}` : ""}`,
+                    });
+                }
                 break;
             case "assistant":
                 if (!isBlank(ev.text)) {

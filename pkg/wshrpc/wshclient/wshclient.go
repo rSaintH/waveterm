@@ -30,45 +30,10 @@ func AiAgentHistoryCommand(w *wshutil.WshRpc, data wshrpc.AiAgentHistoryData, op
 	return resp, err
 }
 
-// command "aiagentinterrupt", wshserver.AiAgentInterruptCommand
-func AiAgentInterruptCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpts) error {
-	_, err := sendRpcRequestCallHelper[any](w, "aiagentinterrupt", data, opts)
-	return err
-}
-
 // command "aiagentlist", wshserver.AiAgentListCommand
 func AiAgentListCommand(w *wshutil.WshRpc, data wshrpc.AiAgentListData, opts *wshrpc.RpcOpts) ([]aiagent.DetectedAgent, error) {
 	resp, err := sendRpcRequestCallHelper[[]aiagent.DetectedAgent](w, "aiagentlist", data, opts)
 	return resp, err
-}
-
-// command "aiagentrun", wshserver.AiAgentRunCommand
-func AiAgentRunCommand(w *wshutil.WshRpc, data wshrpc.AiAgentRunData, opts *wshrpc.RpcOpts) chan wshrpc.RespOrErrorUnion[aiagent.AgentEvent] {
-	return sendRpcRequestResponseStreamHelper[aiagent.AgentEvent](w, "aiagentrun", data, opts)
-}
-
-// command "aiagentsend", wshserver.AiAgentSendCommand
-func AiAgentSendCommand(w *wshutil.WshRpc, data wshrpc.AiAgentSendData, opts *wshrpc.RpcOpts) error {
-	_, err := sendRpcRequestCallHelper[any](w, "aiagentsend", data, opts)
-	return err
-}
-
-// command "aiagentsetpermissionmode", wshserver.AiAgentSetPermissionModeCommand
-func AiAgentSetPermissionModeCommand(w *wshutil.WshRpc, data wshrpc.AiAgentPermissionModeData, opts *wshrpc.RpcOpts) error {
-	_, err := sendRpcRequestCallHelper[any](w, "aiagentsetpermissionmode", data, opts)
-	return err
-}
-
-// command "aiagentstop", wshserver.AiAgentStopCommand
-func AiAgentStopCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpts) error {
-	_, err := sendRpcRequestCallHelper[any](w, "aiagentstop", data, opts)
-	return err
-}
-
-// command "aiagenttooldecision", wshserver.AiAgentToolDecisionCommand
-func AiAgentToolDecisionCommand(w *wshutil.WshRpc, data wshrpc.AiAgentToolDecisionData, opts *wshrpc.RpcOpts) error {
-	_, err := sendRpcRequestCallHelper[any](w, "aiagenttooldecision", data, opts)
-	return err
 }
 
 // command "aisendmessage", wshserver.AiSendMessageCommand

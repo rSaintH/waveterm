@@ -80,23 +80,6 @@ declare global {
         conn?: {[key: string]: number};
     };
 
-    // aiagent.AgentEvent
-    type AgentEvent = {
-        kind: string;
-        sessionid?: string;
-        text?: string;
-        toolnames?: string[];
-        model?: string;
-        cwd?: string;
-        iserror?: boolean;
-        subtype?: string;
-        requestid?: string;
-        toolinput?: string;
-        ratelimitstatus?: string;
-        costusd?: number;
-        raw?: string;
-    };
-
     // wshrpc.AiAgentHistoryData
     type AiAgentHistoryData = {
         connection?: string;
@@ -106,38 +89,6 @@ declare global {
     // wshrpc.AiAgentListData
     type AiAgentListData = {
         connection?: string;
-    };
-
-    // wshrpc.AiAgentPermissionModeData
-    type AiAgentPermissionModeData = {
-        sessionid: string;
-        mode: string;
-    };
-
-    // wshrpc.AiAgentRunData
-    type AiAgentRunData = {
-        sessionid: string;
-        agentid: string;
-        connection?: string;
-        cwd?: string;
-        prompt?: string;
-        interactive?: boolean;
-        permissionmode?: string;
-        resumesessionid?: string;
-    };
-
-    // wshrpc.AiAgentSendData
-    type AiAgentSendData = {
-        sessionid: string;
-        text: string;
-    };
-
-    // wshrpc.AiAgentToolDecisionData
-    type AiAgentToolDecisionData = {
-        sessionid: string;
-        requestid: string;
-        allow: boolean;
-        message?: string;
     };
 
     // wshrpc.AiMessageData
@@ -951,8 +902,9 @@ declare global {
         id: string;
         label: string;
         bin: string;
-        protocol: string;
         supported: boolean;
+        permissionmodeflag: boolean;
+        resumeflag: boolean;
         note?: string;
         found: boolean;
         path?: string;

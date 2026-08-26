@@ -10,58 +10,54 @@ import (
 	"strings"
 )
 
-// Protocol is how we drive an agent's stdio.
-type Protocol string
-
-const (
-	// Claude Code's native newline-delimited JSON. No adapter needed.
-	Protocol_StreamJSON Protocol = "streamjson"
-	// Reserved: the Agent Client Protocol. Nothing we ship drives it yet, and no CLI
-	// checked so far speaks it without an external adapter.
-	Protocol_Acp Protocol = "acp"
-)
-
 // AgentDef is a coding-agent CLI we know how to look for.
 type AgentDef struct {
-	Id       string   `json:"id"`
-	Label    string   `json:"label"`
-	Bin      string   `json:"bin"`
-	Protocol Protocol `json:"protocol"`
-	// False when we can find the binary but cannot drive it yet. Reported to the user
-	// instead of hidden, so "I have it installed but it is not listed" never happens.
+	Id    string `json:"id"`
+	Label string `json:"label"`
+	Bin   string `json:"bin"`
+	// Sessions run in a terminal block, so any interactive CLI qualifies. This is false only
+	// for an agent we know cannot be launched that way. Reported rather than hidden, so
+	// "I have it installed but it is not listed" never happens.
 	Supported bool `json:"supported"`
-	// Why it is unsupported, shown in the UI.
+	// Whether the CLI accepts --permission-mode. Claude Code does; the others manage
+	// permissions their own way, and passing the flag would just fail to start.
+	PermissionModeFlag bool `json:"permissionmodeflag"`
+	// Whether the CLI accepts --resume <id>, which is what makes a past session clickable.
+	ResumeFlag bool `json:"resumeflag"`
+	// Anything the user should know about this agent here.
 	Note string `json:"note,omitempty"`
 }
 
 // Catalog is ordered: the first supported agent found is the sensible default.
 //
-// Verified against the binaries on a Windows + WSL machine in Aug 2026:
-// claude 2.1.241 has --output-format=stream-json and no ACP flag; codex-cli 0.147.0 exposes
-// mcp-server and an experimental app-server but no ACP and no stream-json.
+// Running the agent in a terminal is what makes this list short. Driving a protocol would
+// need one implementation per CLI (stream-json for claude, an experimental JSON-RPC
+// app-server for codex, ACP for gemini); launching an interactive CLI needs none.
 var Catalog = []AgentDef{
 	{
-		Id:        "claude",
-		Label:     "Claude Code",
-		Bin:       "claude",
-		Protocol:  Protocol_StreamJSON,
-		Supported: true,
+		Id:                 "claude",
+		Label:              "Claude Code",
+		Bin:                "claude",
+		Supported:          true,
+		PermissionModeFlag: true,
+		ResumeFlag:         true,
 	},
 	{
 		Id:        "codex",
 		Label:     "Codex CLI",
 		Bin:       "codex",
-		Protocol:  Protocol_Acp,
-		Supported: false,
-		Note:      "driveable via its experimental app-server (JSON-RPC), which this fork does not implement yet",
+		Supported: true,
+		// codex-cli 0.147.0 has no --permission-mode; sandbox and approval settings live in
+		// its own config. Session listing is not wired either, since its transcripts are
+		// not in the claude store this panel reads.
+		Note: "permission mode and past sessions are managed by codex itself",
 	},
 	{
 		Id:        "gemini",
 		Label:     "Gemini CLI",
 		Bin:       "gemini",
-		Protocol:  Protocol_Acp,
-		Supported: false,
-		Note:      "speaks ACP natively, which this fork does not drive yet",
+		Supported: true,
+		Note:      "permission mode and past sessions are managed by gemini itself",
 	},
 }
 
@@ -69,23 +65,15 @@ var Catalog = []AgentDef{
 // rather than embedding AgentDef, because the typescript generator flattens embedded structs
 // inconsistently.
 type DetectedAgent struct {
-	Id        string   `json:"id"`
-	Label     string   `json:"label"`
-	Bin       string   `json:"bin"`
-	Protocol  Protocol `json:"protocol"`
-	Supported bool     `json:"supported"`
-	Note      string   `json:"note,omitempty"`
-	Found     bool     `json:"found"`
-	Path      string   `json:"path,omitempty"`
-}
-
-func lookupAgentDef(id string) (AgentDef, error) {
-	for _, def := range Catalog {
-		if def.Id == id {
-			return def, nil
-		}
-	}
-	return AgentDef{}, fmt.Errorf("unknown agent %q", id)
+	Id                 string `json:"id"`
+	Label              string `json:"label"`
+	Bin                string `json:"bin"`
+	Supported          bool   `json:"supported"`
+	PermissionModeFlag bool   `json:"permissionmodeflag"`
+	ResumeFlag         bool   `json:"resumeflag"`
+	Note               string `json:"note,omitempty"`
+	Found              bool   `json:"found"`
+	Path               string `json:"path,omitempty"`
 }
 
 // WslDistroFromConn returns the distro for a wsl:// connection, or "" for anything else.
@@ -115,12 +103,13 @@ func DetectAgents(ctx context.Context, connName string) ([]DetectedAgent, error)
 	rtn := make([]DetectedAgent, 0, len(Catalog))
 	for _, def := range Catalog {
 		det := DetectedAgent{
-			Id:        def.Id,
-			Label:     def.Label,
-			Bin:       def.Bin,
-			Protocol:  def.Protocol,
-			Supported: def.Supported,
-			Note:      def.Note,
+			Id:                 def.Id,
+			Label:              def.Label,
+			Bin:                def.Bin,
+			Supported:          def.Supported,
+			PermissionModeFlag: def.PermissionModeFlag,
+			ResumeFlag:         def.ResumeFlag,
+			Note:               def.Note,
 		}
 		var path string
 		var err error
@@ -152,54 +141,4 @@ func lookupInWsl(ctx context.Context, distro string, bin string) (string, error)
 		return "", fmt.Errorf("%s not found in %s", bin, distro)
 	}
 	return path, nil
-}
-
-// SessionOpts describes a session to start.
-type SessionOpts struct {
-	AgentId string `json:"agentid"`
-	// Working directory for the agent, on the target machine.
-	Cwd string `json:"cwd,omitempty"`
-	// Connection the agent runs on: "" for local, "wsl://Ubuntu", ...
-	Connection string `json:"connection,omitempty"`
-	// The first prompt. Required when Interactive is false.
-	Prompt string `json:"prompt,omitempty"`
-	// When true the session stays open and reads further prompts from stdin.
-	Interactive bool `json:"interactive,omitempty"`
-	// One of the CLI permission modes: acceptEdits, auto, bypassPermissions, manual,
-	// dontAsk, plan. Empty leaves the CLI default.
-	PermissionMode string `json:"permissionmode,omitempty"`
-	// Session id to resume. The transcript lives in the agent CLI store, not in Wave.
-	ResumeSessionId string `json:"resumesessionid,omitempty"`
-}
-
-// BuildArgs returns the CLI arguments for a session. The binary itself is resolved
-// separately, since on a wsl:// connection the command is wrapped by wsl.exe.
-func BuildArgs(opts SessionOpts) ([]string, error) {
-	def, err := lookupAgentDef(opts.AgentId)
-	if err != nil {
-		return nil, err
-	}
-	if !def.Supported {
-		return nil, fmt.Errorf("%s cannot be driven yet: %s", def.Label, def.Note)
-	}
-	if def.Protocol != Protocol_StreamJSON {
-		return nil, fmt.Errorf("protocol %q is not implemented", def.Protocol)
-	}
-	// --verbose is required for stream-json to emit anything beyond the final result.
-	args := []string{"--print", "--output-format=stream-json", "--verbose"}
-	if opts.PermissionMode != "" {
-		args = append(args, "--permission-mode", opts.PermissionMode)
-	}
-	if opts.ResumeSessionId != "" {
-		args = append(args, "--resume", opts.ResumeSessionId)
-	}
-	if opts.Interactive {
-		args = append(args, "--input-format=stream-json")
-	} else {
-		if opts.Prompt == "" {
-			return nil, fmt.Errorf("a non-interactive session needs a prompt")
-		}
-		args = append(args, opts.Prompt)
-	}
-	return args, nil
 }

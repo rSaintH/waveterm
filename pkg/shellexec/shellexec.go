@@ -169,6 +169,11 @@ func StartWslShellProcNoWsh(ctx context.Context, termSize waveobj.TermSize, cmdS
 	conn.Infof(ctx, "WSL-NEWSESSION (StartWslShellProcNoWsh)")
 
 	wslArgs := append(wslStartDirArgs(cmdOpts.Cwd), "-d", client.Name())
+	if cmdStr != "" {
+		// A cmd block still has to run its command when wsh is unavailable; without this the
+		// block silently opened a plain shell instead.
+		wslArgs = append(wslArgs, "--", "sh", "-c", cmdStr)
+	}
 	ecmd := exec.Command("wsl.exe", wslArgs...)
 
 	if termSize.Rows == 0 || termSize.Cols == 0 {

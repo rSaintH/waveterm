@@ -13,6 +13,10 @@ import { atom, type Atom, type PrimitiveAtom } from "jotai";
 // Mirrors aiagent.SessionPlaceholder on the go side.
 const SESSION_PLACEHOLDER = "{session}";
 
+// Detection and history on a WSL connection spawn login shells inside the distro, and a cold
+// distro can take a while to boot; the 5s rpc default was regularly too short.
+const AGENT_RPC_TIMEOUT_MS = 60000;
+
 // This panel launches the agent into a real terminal block instead of driving its stdio
 // protocol. The protocol route was built first and hit a wall: the CLI asks for tool
 // permission through an MCP tool named by --permission-prompt-tool, and Wave has no MCP
@@ -42,6 +46,10 @@ export class AiAgentViewModel implements ViewModel {
     isLoadingAtom: PrimitiveAtom<boolean>;
     // Where the agent will run, derived from the tab's project.
     targetAtom: Atom<{ cwd: string; connection: string }>;
+    // Request counters: a slow response (WSL calls take seconds) must not overwrite the state
+    // of a newer selection that already answered.
+    private agentsReqSeq = 0;
+    private historyReqSeq = 0;
 
     constructor({ blockId, nodeModel, tabModel, waveEnv }: ViewModelInitType) {
         this.blockId = blockId;
@@ -75,6 +83,13 @@ export class AiAgentViewModel implements ViewModel {
 
     updateSelected(agentId: string) {
         globalStore.set(this.selectedAgentAtom, agentId);
+        // A mode picked for the previous agent may not exist on this one; keeping it would
+        // either show a blank dropdown or hand the CLI a flag value it rejects.
+        const agent = globalStore.get(this.agentsAtom).find((a) => a.id == agentId);
+        const mode = globalStore.get(this.permissionModeAtom);
+        if (!isBlank(mode) && !(agent?.permissionmodes ?? []).includes(mode)) {
+            globalStore.set(this.permissionModeAtom, "");
+        }
         // Each agent has its own store, so the list has to follow the selection.
         globalStore.set(this.historyAtom, []);
         fireAndForget(() => this.loadHistory());
@@ -97,9 +112,17 @@ export class AiAgentViewModel implements ViewModel {
 
     async loadAgents(): Promise<void> {
         const { connection } = globalStore.get(this.targetAtom);
+        const seq = ++this.agentsReqSeq;
         globalStore.set(this.errorAtom, null);
         try {
-            const list = await this.env.rpc.AiAgentListCommand(TabRpcClient, { connection });
+            const list = await this.env.rpc.AiAgentListCommand(
+                TabRpcClient,
+                { connection },
+                { timeout: AGENT_RPC_TIMEOUT_MS }
+            );
+            if (seq != this.agentsReqSeq) {
+                return;
+            }
             globalStore.set(this.agentsAtom, list ?? []);
             if (isBlank(globalStore.get(this.selectedAgentAtom))) {
                 const first = (list ?? []).find((a) => a.found && a.supported);
@@ -108,6 +131,9 @@ export class AiAgentViewModel implements ViewModel {
                 }
             }
         } catch (e) {
+            if (seq != this.agentsReqSeq) {
+                return;
+            }
             globalStore.set(this.errorAtom, `Could not look for agents: ${e?.message ?? e}`);
         }
     }
@@ -115,6 +141,7 @@ export class AiAgentViewModel implements ViewModel {
     async loadHistory(): Promise<void> {
         const { cwd, connection } = globalStore.get(this.targetAtom);
         const agentId = globalStore.get(this.selectedAgentAtom);
+        const seq = ++this.historyReqSeq;
         if (isBlank(cwd) || isBlank(agentId)) {
             // Sessions are stored per working directory, so without one there is nothing to
             // list rather than an error to show.
@@ -122,13 +149,25 @@ export class AiAgentViewModel implements ViewModel {
             return;
         }
         try {
-            const list = await this.env.rpc.AiAgentHistoryCommand(TabRpcClient, {
-                connection,
-                agentid: agentId,
-                cwd,
-            });
+            const list = await this.env.rpc.AiAgentHistoryCommand(
+                TabRpcClient,
+                {
+                    connection,
+                    agentid: agentId,
+                    cwd,
+                },
+                { timeout: AGENT_RPC_TIMEOUT_MS }
+            );
+            if (seq != this.historyReqSeq) {
+                return;
+            }
             globalStore.set(this.historyAtom, list ?? []);
+            // A load that worked clears whatever a previous one had to say.
+            globalStore.set(this.errorAtom, null);
         } catch (e) {
+            if (seq != this.historyReqSeq) {
+                return;
+            }
             globalStore.set(this.errorAtom, `Could not read past sessions: ${e?.message ?? e}`);
         }
     }
@@ -168,7 +207,9 @@ export class AiAgentViewModel implements ViewModel {
             args.push(...this.applySessionTemplate(template, sessionId));
         }
         const permMode = globalStore.get(this.permissionModeAtom);
-        if (!isBlank(permMode) && agent.permissionmodeflag) {
+        // Only pass a mode this CLI actually declares: a leftover value from another agent
+        // would stop the process from starting at all.
+        if (!isBlank(permMode) && agent.permissionmodeflag && (agent.permissionmodes ?? []).includes(permMode)) {
             args.push("--permission-mode", permMode);
         }
         const meta: MetaType = {

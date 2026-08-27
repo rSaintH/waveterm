@@ -416,7 +416,7 @@ func (bc *ShellController) setupAndStartShellProcess(logCtx context.Context, rc 
 		}
 	} else if bc.ControllerType == BlockController_Cmd {
 		var cmdOptsPtr *shellexec.CommandOptsType
-		cmdStr, cmdOptsPtr, err = createCmdStrAndOpts(bc.BlockId, blockMeta, remoteName)
+		cmdStr, cmdOptsPtr, err = createCmdStrAndOpts(bc.BlockId, blockMeta, remoteName, connUnion.ShellType)
 		if err != nil {
 			return nil, err
 		}
@@ -719,7 +719,7 @@ func getLocalShellOpts(blockMeta waveobj.MetaMapType) []string {
 }
 
 // for "cmd" type blocks
-func createCmdStrAndOpts(blockId string, blockMeta waveobj.MetaMapType, connName string) (string, *shellexec.CommandOptsType, error) {
+func createCmdStrAndOpts(blockId string, blockMeta waveobj.MetaMapType, connName string, shellType string) (string, *shellexec.CommandOptsType, error) {
 	var cmdStr string
 	var cmdOpts shellexec.CommandOptsType
 	cmdStr = blockMeta.GetString(waveobj.MetaKey_Cmd, "")
@@ -727,7 +727,11 @@ func createCmdStrAndOpts(blockId string, blockMeta waveobj.MetaMapType, connName
 		return "", nil, fmt.Errorf("missing cmd in block meta")
 	}
 	cmdOpts.Cwd = blockMeta.GetString(waveobj.MetaKey_CmdCwd, "")
-	if cmdOpts.Cwd != "" {
+	// Same rule as the shell controller: only resolve the cwd against the local filesystem
+	// for local connections. On a remote connection the path belongs to the other machine:
+	// filepath.Clean would rewrite "/home/x" as "\home\x" on Windows, which wsl.exe rejects
+	// outright (Wsl/E_INVALIDARG), so the block never started.
+	if cmdOpts.Cwd != "" && conncontroller.IsLocalConnName(connName) {
 		cwdPath, err := wavebase.ExpandHomeDir(cmdOpts.Cwd)
 		if err != nil {
 			return "", nil, err
@@ -737,7 +741,11 @@ func createCmdStrAndOpts(blockId string, blockMeta waveobj.MetaMapType, connName
 	useShell := blockMeta.GetBool(waveobj.MetaKey_CmdShell, true)
 	if !useShell {
 		if strings.Contains(cmdStr, " ") {
-			return "", nil, fmt.Errorf("cmd should not have spaces if cmd:shell is false (use cmd:args)")
+			quoted, err := quoteCmdPathForShell(cmdStr, shellType)
+			if err != nil {
+				return "", nil, err
+			}
+			cmdStr = quoted
 		}
 		cmdArgs := blockMeta.GetStringList(waveobj.MetaKey_CmdArgs)
 		// shell escape the args
@@ -747,6 +755,24 @@ func createCmdStrAndOpts(blockId string, blockMeta waveobj.MetaMapType, connName
 	}
 	cmdOpts.ForceJwt = blockMeta.GetBool(waveobj.MetaKey_CmdJwt, false)
 	return cmdStr, &cmdOpts, nil
+}
+
+// quoteCmdPathForShell makes a command path containing spaces runnable with cmd:shell=false.
+// The composed string is handed to `<shell> -c`, so the quoting has to match that shell; on
+// Windows the CLIs often live under paths like "C:\Users\John Doe\AppData\...", which used to
+// be rejected outright.
+func quoteCmdPathForShell(cmdStr string, shellType string) (string, error) {
+	switch shellType {
+	case shellutil.ShellType_pwsh:
+		// PowerShell needs the call operator to run a quoted path.
+		return "& '" + strings.ReplaceAll(cmdStr, "'", "''") + "'", nil
+	case shellutil.ShellType_bash, shellutil.ShellType_zsh:
+		return utilfn.ShellQuote(cmdStr, false, -1), nil
+	case shellutil.ShellType_fish:
+		return shellutil.HardQuoteFish(cmdStr), nil
+	default:
+		return "", fmt.Errorf("cmd should not have spaces if cmd:shell is false (use cmd:args)")
+	}
 }
 
 func (bc *ShellController) getBlockData_noErr() *waveobj.Block {

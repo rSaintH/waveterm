@@ -99,9 +99,15 @@ export const AiAgentView = memo(({ model }: ViewComponentProps<AiAgentViewModel>
     const canList = selectedAgent?.historysupported ?? false;
     const canFork = (selectedAgent?.forkargs?.length ?? 0) > 0;
 
+    // The tab's project can appear or change after the panel mounts. A connection change
+    // needs a full re-detect (the agents live on the other machine); a directory change only
+    // moves the session store.
     useEffect(() => {
         model.refresh();
-    }, []);
+    }, [target.connection]);
+    useEffect(() => {
+        model.loadHistory();
+    }, [target.cwd]);
 
     return (
         <div className="flex flex-col h-full min-h-0">

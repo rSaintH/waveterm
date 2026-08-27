@@ -5,7 +5,9 @@ package aiagent
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestWslDistroFromConn(t *testing.T) {
@@ -192,16 +194,66 @@ func TestUnsupportedCatalogEntriesExplainWhy(t *testing.T) {
 }
 
 func TestEncodeProjectDir(t *testing.T) {
-	// Verified against the directories the CLI actually created on disk.
+	// Verified against the encoder bundled in claude 2.1.241: every character outside
+	// [a-zA-Z0-9] becomes a dash, counted per UTF-16 code unit.
 	cases := map[string]string{
-		`C:\Users\rafa\scratch`:     "C--Users-rafa-scratch",
-		"/home/rafa/workspace/proj": "-home-rafa-workspace-proj",
-		`C:\a\.claude\b`:            "C--a--claude-b",
+		`C:\Users\rafa\scratch`:         "C--Users-rafa-scratch",
+		"/home/rafa/workspace/proj":     "-home-rafa-workspace-proj",
+		`C:\a\.claude\b`:                "C--a--claude-b",
+		`C:\Users\rafa\my_project (v2)`: "C--Users-rafa-my-project--v2-",
+		`C:\João`:                       "C--Jo-o",
+		"ação é 😀":                      "a--o-----",
 	}
 	for in, want := range cases {
 		if got := EncodeProjectDir(in); got != want {
 			t.Errorf("EncodeProjectDir(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// Past 200 characters the CLI truncates and appends a base36 hash of the raw path. The
+// expected values were produced by the CLI's own hash function.
+func TestEncodeProjectDirLongPathGetsHashSuffix(t *testing.T) {
+	in := `C:\Users\rafa\` + strings.Repeat("x", 250)
+	want := "C--Users-rafa-" + strings.Repeat("x", 186) + "-g0kg5j"
+	if got := EncodeProjectDir(in); got != want {
+		t.Errorf("EncodeProjectDir(long) = %q, want %q", got, want)
+	}
+}
+
+func TestClaudePathHash(t *testing.T) {
+	cases := map[string]string{
+		`C:\Users\rafa\Documents\workspace-windows`: "8s9vyq",
+		`C:\Users\rafa\my_project (v2)`:             "a7q2ti",
+		"ação é 😀":                                  "uj4tyw",
+	}
+	for in, want := range cases {
+		if got := claudePathHash(in); got != want {
+			t.Errorf("claudePathHash(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// The CLI encodes the cwd exactly as the process saw it, so on Windows a project launched
+// with "c:" and with "C:" has two store directories; both have to be searched.
+func TestClaudeProjectDirCandidatesFlipDriveCase(t *testing.T) {
+	got := claudeProjectDirCandidates(`C:\Users\rafa`)
+	if len(got) != 2 || got[0] != "C--Users-rafa" || got[1] != "c--Users-rafa" {
+		t.Errorf("candidates = %v", got)
+	}
+	if got := claudeProjectDirCandidates("/home/rafa/proj"); len(got) != 1 {
+		t.Errorf("a path without a drive letter has one candidate, got %v", got)
+	}
+}
+
+func TestTruncateTitleCutsOnRuneBoundary(t *testing.T) {
+	in := strings.Repeat("a", 79) + "ção mais texto para passar do limite"
+	got := truncateTitle(in)
+	if !utf8.ValidString(got) {
+		t.Errorf("truncated title is not valid utf-8: %q", got)
+	}
+	if len(got) > 80+len("…") {
+		t.Errorf("title was not truncated: %q", got)
 	}
 }
 

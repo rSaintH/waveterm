@@ -50,5 +50,15 @@
                 "view": "processviewer"
             }
         }
+    },
+    "defwidget@aiagent": {
+        "display:order": 0,
+        "icon": "robot",
+        "label": "agent",
+        "blockdef": {
+            "meta": {
+                "view": "aiagent"
+            }
+        }
     }
 }

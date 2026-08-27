@@ -139,6 +139,19 @@ func DetectAgents(ctx context.Context, connName string) ([]DetectedAgent, error)
 	if !IsLocalConn(connName) && distro == "" {
 		return nil, fmt.Errorf("agent detection is not implemented for connection %q", connName)
 	}
+	var wslPaths map[string]string
+	if distro != "" {
+		bins := make([]string, 0, len(Catalog))
+		for _, def := range Catalog {
+			bins = append(bins, def.Bin)
+		}
+		var err error
+		wslPaths, err = lookupBinsInWsl(ctx, distro, bins)
+		if err != nil {
+			// A dead distro is an error, not "nothing is installed".
+			return nil, fmt.Errorf("cannot look for agents in %s: %w", distro, err)
+		}
+	}
 	rtn := make([]DetectedAgent, 0, len(Catalog))
 	for _, def := range Catalog {
 		det := DetectedAgent{
@@ -154,13 +167,12 @@ func DetectAgents(ctx context.Context, connName string) ([]DetectedAgent, error)
 			Note:               def.Note,
 		}
 		var path string
-		var err error
 		if distro != "" {
-			path, err = lookupInWsl(ctx, distro, def.Bin)
-		} else {
-			path, err = exec.LookPath(def.Bin)
+			path = wslPaths[def.Bin]
+		} else if p, err := exec.LookPath(def.Bin); err == nil {
+			path = p
 		}
-		if err == nil && path != "" {
+		if path != "" {
 			det.Found = true
 			det.Path = path
 		}
@@ -169,18 +181,25 @@ func DetectAgents(ctx context.Context, connName string) ([]DetectedAgent, error)
 	return rtn, nil
 }
 
-// lookupInWsl resolves a binary inside a distro. A login shell is used on purpose: these
-// CLIs are usually installed by nvm or into ~/.local/bin, neither of which is on PATH for a
-// non-login shell.
-func lookupInWsl(ctx context.Context, distro string, bin string) (string, error) {
-	cmd := exec.CommandContext(ctx, "wsl.exe", "-d", distro, "-e", "bash", "-lc", "command -v "+bin)
-	out, err := cmd.Output()
+// lookupBinsInWsl resolves every catalog binary in one shell. A login shell is used on
+// purpose (these CLIs are usually installed by nvm or into ~/.local/bin, neither of which is
+// on PATH otherwise), but a login shell costs seconds to start, so one invocation resolves
+// everything instead of one per binary — three lookups used to blow past the rpc timeout.
+func lookupBinsInWsl(ctx context.Context, distro string, bins []string) (map[string]string, error) {
+	var sb strings.Builder
+	for _, bin := range bins {
+		sb.WriteString(fmt.Sprintf(`printf '%%s\t%%s\n' %q "$(command -v -- %q)"; `, bin, bin))
+	}
+	out, err := runInDistro(ctx, distro, sb.String(), true)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	path := strings.TrimSpace(strings.ReplaceAll(string(out), "\r", ""))
-	if path == "" {
-		return "", fmt.Errorf("%s not found in %s", bin, distro)
+	rtn := map[string]string{}
+	for _, line := range splitLines(out) {
+		fields := strings.SplitN(line, "\t", 2)
+		if len(fields) == 2 && fields[1] != "" {
+			rtn[fields[0]] = fields[1]
+		}
 	}
-	return path, nil
+	return rtn, nil
 }
